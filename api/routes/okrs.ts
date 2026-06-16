@@ -1,12 +1,12 @@
 import { Router, type Request, type Response } from 'express'
 import { v4 as uuidv4 } from 'uuid'
-import { okrs, keyResults, recalcOkrProgress, findOkrById, findUserById } from '../db/store.js'
+import { okrs, keyResults, recalcOkrProgress, findOkrById, findUserById, updateDependencyRisks, saveData } from '../db/store.js'
 
 const router = Router()
 
 router.get('/', (req: Request, res: Response): void => {
   try {
-    const { level, quarter, year, status, owner_id, department_id } = req.query
+    const { level, quarter, year, status, owner_id, department_id, parent_okr_id } = req.query
     let filtered = okrs.map(o => {
       const owner = findUserById(o.owner_id)
       return { ...o, owner_name: owner?.name ?? null }
@@ -17,6 +17,13 @@ router.get('/', (req: Request, res: Response): void => {
     if (status) filtered = filtered.filter(o => o.status === status)
     if (owner_id) filtered = filtered.filter(o => o.owner_id === owner_id)
     if (department_id) filtered = filtered.filter(o => o.department_id === department_id)
+    if (parent_okr_id !== undefined) {
+      if (parent_okr_id === 'null') {
+        filtered = filtered.filter(o => o.parent_okr_id === null)
+      } else {
+        filtered = filtered.filter(o => o.parent_okr_id === parent_okr_id)
+      }
+    }
     filtered.sort((a, b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime())
     res.json({ success: true, data: filtered })
   } catch (error) {
@@ -102,6 +109,7 @@ router.post('/', (req: Request, res: Response): void => {
       updated_at: now,
     }
     okrs.push(okr)
+    saveData()
     const owner = findUserById(okr.owner_id)
     res.status(201).json({ success: true, data: { ...okr, owner_name: owner?.name ?? null } })
   } catch (error) {
@@ -124,6 +132,7 @@ router.put('/:id', (req: Request, res: Response): void => {
     if (year !== undefined) okr.year = year
     if (status !== undefined) okr.status = status
     okr.updated_at = new Date().toISOString()
+    saveData()
     const owner = findUserById(okr.owner_id)
     res.json({ success: true, data: { ...okr, owner_name: owner?.name ?? null } })
   } catch (error) {
@@ -141,6 +150,7 @@ router.delete('/:id', (req: Request, res: Response): void => {
         keyResults.splice(i, 1)
       }
     }
+    saveData()
     res.json({ success: true, data: null })
   } catch (error) {
     res.status(500).json({ success: false, error: 'Failed to delete OKR' })
@@ -168,6 +178,7 @@ router.post('/:id/key-results', (req: Request, res: Response): void => {
     }
     keyResults.push(kr)
     recalcOkrProgress(req.params.id)
+    saveData()
     res.status(201).json({ success: true, data: kr })
   } catch (error) {
     res.status(500).json({ success: false, error: 'Failed to create key result' })
@@ -185,6 +196,7 @@ router.put('/:id/key-results/:krId', (req: Request, res: Response): void => {
     if (update_method !== undefined) kr.update_method = update_method
     if (data_source_url !== undefined) kr.data_source_url = data_source_url
     kr.updated_at = new Date().toISOString()
+    saveData()
     res.json({ success: true, data: kr })
   } catch (error) {
     res.status(500).json({ success: false, error: 'Failed to update key result' })
@@ -197,6 +209,7 @@ router.delete('/:id/key-results/:krId', (req: Request, res: Response): void => {
     if (idx === -1) { res.status(404).json({ success: false, error: 'Key result not found' }); return }
     keyResults.splice(idx, 1)
     recalcOkrProgress(req.params.id)
+    saveData()
     res.json({ success: true, data: null })
   } catch (error) {
     res.status(500).json({ success: false, error: 'Failed to delete key result' })
@@ -212,9 +225,32 @@ router.put('/:id/key-results/:krId/progress', (req: Request, res: Response): voi
     kr.progress = kr.target_value > 0 ? Math.min((current_value / kr.target_value) * 100, 100) : 0
     kr.updated_at = new Date().toISOString()
     recalcOkrProgress(req.params.id)
+    updateDependencyRisks(req.params.id)
+    saveData()
     res.json({ success: true, data: kr })
   } catch (error) {
     res.status(500).json({ success: false, error: 'Failed to update key result progress' })
+  }
+})
+
+router.put('/:id/key-results/:krId/sync', (req: Request, res: Response): void => {
+  try {
+    const kr = keyResults.find(k => k.id === req.params.krId && k.okr_id === req.params.id)
+    if (!kr) { res.status(404).json({ success: false, error: 'Key result not found' }); return }
+    const currentProgress = kr.progress
+    const minProgress = currentProgress
+    const maxProgress = Math.min(100, currentProgress + (100 - currentProgress) * 0.3)
+    const newProgress = minProgress + Math.random() * (maxProgress - minProgress)
+    const newValue = (newProgress / 100) * kr.target_value
+    kr.current_value = Math.round(newValue * 100) / 100
+    kr.progress = Math.round(newProgress * 100) / 100
+    kr.updated_at = new Date().toISOString()
+    recalcOkrProgress(req.params.id)
+    updateDependencyRisks(req.params.id)
+    saveData()
+    res.json({ success: true, data: kr })
+  } catch (error) {
+    res.status(500).json({ success: false, error: 'Failed to sync key result' })
   }
 })
 

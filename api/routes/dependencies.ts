@@ -1,6 +1,6 @@
 import { Router, type Request, type Response } from 'express'
 import { v4 as uuidv4 } from 'uuid'
-import { dependencies, notifications, findOkrById, findUserById } from '../db/store.js'
+import { dependencies, notifications, findOkrById, findUserById, saveData } from '../db/store.js'
 import type { Dependency, Notification } from '../db/store.js'
 
 const router = Router()
@@ -54,6 +54,7 @@ router.put('/notifications/:id/read', (req: Request, res: Response): void => {
     const notif = notifications.find(n => n.id === req.params.id)
     if (!notif) { res.status(404).json({ success: false, error: 'Notification not found' }); return }
     notif.is_read = true
+    saveData()
     res.json({ success: true, data: notif })
   } catch (error) {
     res.status(500).json({ success: false, error: 'Failed to mark notification as read' })
@@ -135,6 +136,7 @@ router.post('/', (req: Request, res: Response): void => {
         })
       }
     }
+    saveData()
     res.status(201).json({ success: true, data: dep })
   } catch (error) {
     res.status(500).json({ success: false, error: 'Failed to create dependency' })
@@ -151,6 +153,7 @@ router.delete('/:id', (req: Request, res: Response): void => {
         notifications.splice(i, 1)
       }
     }
+    saveData()
     res.json({ success: true, data: null })
   } catch (error) {
     res.status(500).json({ success: false, error: 'Failed to delete dependency' })

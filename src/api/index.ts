@@ -85,6 +85,12 @@ export async function updateKeyResultProgress(okrId: string, krId: string, curre
   });
 }
 
+export async function syncKeyResult(okrId: string, krId: string): Promise<KeyResult> {
+  return request<KeyResult>(`/api/okrs/${okrId}/key-results/${krId}/sync`, {
+    method: 'PUT',
+  });
+}
+
 export async function fetchWeeklyUpdates(params?: Record<string, string>): Promise<WeeklyUpdate[]> {
   return request<WeeklyUpdate[]>(`/api/weekly-updates${buildQuery(params)}`);
 }

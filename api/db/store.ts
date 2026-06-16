@@ -1,3 +1,14 @@
+import fs from 'fs'
+import path from 'path'
+import { fileURLToPath } from 'url'
+import { v4 as uuidv4 } from 'uuid'
+
+const __filename = fileURLToPath(import.meta.url)
+const __dirname = path.dirname(__filename)
+
+const dataDir = path.join(__dirname, '..', '..', 'data')
+const dataFilePath = path.join(dataDir, 'okr-data.json')
+
 export interface Department {
   id: string
   name: string
@@ -95,13 +106,25 @@ export interface Notification {
   created_at: string
 }
 
-export const departments: Department[] = [
+interface DataStore {
+  departments: Department[]
+  users: User[]
+  okrs: OKR[]
+  keyResults: KeyResult[]
+  weeklyUpdates: WeeklyUpdate[]
+  reviews: Review[]
+  krScores: KrScore[]
+  dependencies: Dependency[]
+  notifications: Notification[]
+}
+
+const seedDepartments: Department[] = [
   { id: 'dept-1', name: '技术部', parent_id: null, created_at: '2026-01-01T00:00:00.000Z' },
   { id: 'dept-2', name: '产品部', parent_id: null, created_at: '2026-01-01T00:00:00.000Z' },
   { id: 'dept-3', name: '市场部', parent_id: null, created_at: '2026-01-01T00:00:00.000Z' },
 ]
 
-export const users: User[] = [
+const seedUsers: User[] = [
   { id: 'user-1', name: '张伟', email: 'zhangwei@company.com', role: 'admin', department_id: 'dept-1', created_at: '2026-01-01T00:00:00.000Z' },
   { id: 'user-2', name: '李明', email: 'liming@company.com', role: 'manager', department_id: 'dept-1', created_at: '2026-01-01T00:00:00.000Z' },
   { id: 'user-3', name: '王芳', email: 'wangfang@company.com', role: 'manager', department_id: 'dept-2', created_at: '2026-01-01T00:00:00.000Z' },
@@ -109,7 +132,7 @@ export const users: User[] = [
   { id: 'user-5', name: '陈静', email: 'chenjing@company.com', role: 'employee', department_id: 'dept-2', created_at: '2026-01-01T00:00:00.000Z' },
 ]
 
-export const okrs: OKR[] = [
+const seedOkrs: OKR[] = [
   {
     id: 'okr-1', title: '提升公司整体运营效率', description: '2026年Q2公司级OKR',
     level: 'company', owner_id: 'user-1', department_id: null, parent_okr_id: null,
@@ -142,7 +165,7 @@ export const okrs: OKR[] = [
   },
 ]
 
-export const keyResults: KeyResult[] = [
+const seedKeyResults: KeyResult[] = [
   { id: 'kr-1', okr_id: 'okr-1', title: '运营成本降低', target_value: 20, current_value: 8, unit: '%', update_method: 'manual', data_source_url: null, progress: 40, created_at: '2026-04-01T00:00:00.000Z', updated_at: '2026-04-01T00:00:00.000Z' },
   { id: 'kr-2', okr_id: 'okr-1', title: '客户满意度提升', target_value: 95, current_value: 78, unit: '分', update_method: 'manual', data_source_url: null, progress: 82, created_at: '2026-04-01T00:00:00.000Z', updated_at: '2026-04-01T00:00:00.000Z' },
   { id: 'kr-3', okr_id: 'okr-1', title: '内部流程自动化率', target_value: 80, current_value: 45, unit: '%', update_method: 'manual', data_source_url: null, progress: 56, created_at: '2026-04-01T00:00:00.000Z', updated_at: '2026-04-01T00:00:00.000Z' },
@@ -158,25 +181,105 @@ export const keyResults: KeyResult[] = [
   { id: 'kr-13', okr_id: 'okr-5', title: '用户反馈响应时间', target_value: 24, current_value: 48, unit: '小时', update_method: 'manual', data_source_url: null, progress: 50, created_at: '2026-04-01T00:00:00.000Z', updated_at: '2026-04-01T00:00:00.000Z' },
 ]
 
-export const weeklyUpdates: WeeklyUpdate[] = [
+const seedWeeklyUpdates: WeeklyUpdate[] = [
   { id: 'wu-1', okr_id: 'okr-4', kr_id: 'kr-9', week_number: 23, year: 2026, progress_description: '完成5个新组件开发', confidence_index: 8, kr_current_value: 60, updated_by: 'user-4', created_at: '2026-06-07T00:00:00.000Z' },
   { id: 'wu-2', okr_id: 'okr-5', kr_id: 'kr-11', week_number: 23, year: 2026, progress_description: '完成2次用户调研', confidence_index: 6, kr_current_value: 2, updated_by: 'user-5', created_at: '2026-06-07T00:00:00.000Z' },
   { id: 'wu-3', okr_id: 'okr-2', kr_id: 'kr-6', week_number: 23, year: 2026, progress_description: '新增自动化测试用例42个', confidence_index: 7, kr_current_value: 58, updated_by: 'user-2', created_at: '2026-06-07T00:00:00.000Z' },
 ]
 
-export const reviews: Review[] = []
+const seedReviews: Review[] = []
 
-export const krScores: KrScore[] = []
+const seedKrScores: KrScore[] = []
 
-export const dependencies: Dependency[] = [
+const seedDependencies: Dependency[] = [
   { id: 'dep-1', dependent_okr_id: 'okr-4', depended_okr_id: 'okr-3', status: 'at_risk', created_at: '2026-04-15T00:00:00.000Z' },
   { id: 'dep-2', dependent_okr_id: 'okr-5', depended_okr_id: 'okr-2', status: 'healthy', created_at: '2026-04-15T00:00:00.000Z' },
 ]
 
-export const notifications: Notification[] = [
+const seedNotifications: Notification[] = [
   { id: 'notif-1', dependency_id: 'dep-1', user_id: 'user-4', message: '您依赖的OKR「产品部提升用户体验」进度落后（38%），存在风险', risk_level: 'warning', is_read: false, created_at: '2026-04-15T00:00:00.000Z' },
   { id: 'notif-2', dependency_id: 'dep-1', user_id: 'user-5', message: 'OKR「提升前端开发效率」依赖您的OKR进度，请关注', risk_level: 'warning', is_read: false, created_at: '2026-04-15T00:00:00.000Z' },
 ]
+
+const seedData: DataStore = {
+  departments: seedDepartments,
+  users: seedUsers,
+  okrs: seedOkrs,
+  keyResults: seedKeyResults,
+  weeklyUpdates: seedWeeklyUpdates,
+  reviews: seedReviews,
+  krScores: seedKrScores,
+  dependencies: seedDependencies,
+  notifications: seedNotifications,
+}
+
+export let departments: Department[] = []
+export let users: User[] = []
+export let okrs: OKR[] = []
+export let keyResults: KeyResult[] = []
+export let weeklyUpdates: WeeklyUpdate[] = []
+export let reviews: Review[] = []
+export let krScores: KrScore[] = []
+export let dependencies: Dependency[] = []
+export let notifications: Notification[] = []
+
+function ensureDataDir(): void {
+  if (!fs.existsSync(dataDir)) {
+    fs.mkdirSync(dataDir, { recursive: true })
+  }
+}
+
+export function loadData(): void {
+  ensureDataDir()
+  if (fs.existsSync(dataFilePath)) {
+    try {
+      const raw = fs.readFileSync(dataFilePath, 'utf-8')
+      const data: DataStore = JSON.parse(raw)
+      departments = data.departments || []
+      users = data.users || []
+      okrs = data.okrs || []
+      keyResults = data.keyResults || []
+      weeklyUpdates = data.weeklyUpdates || []
+      reviews = data.reviews || []
+      krScores = data.krScores || []
+      dependencies = data.dependencies || []
+      notifications = data.notifications || []
+    } catch {
+      useSeedData()
+    }
+  } else {
+    useSeedData()
+  }
+}
+
+function useSeedData(): void {
+  departments = [...seedData.departments]
+  users = [...seedData.users]
+  okrs = [...seedData.okrs]
+  keyResults = [...seedData.keyResults]
+  weeklyUpdates = [...seedData.weeklyUpdates]
+  reviews = [...seedData.reviews]
+  krScores = [...seedData.krScores]
+  dependencies = [...seedData.dependencies]
+  notifications = [...seedData.notifications]
+  saveData()
+}
+
+export function saveData(): void {
+  ensureDataDir()
+  const data: DataStore = {
+    departments,
+    users,
+    okrs,
+    keyResults,
+    weeklyUpdates,
+    reviews,
+    krScores,
+    dependencies,
+    notifications,
+  }
+  fs.writeFileSync(dataFilePath, JSON.stringify(data, null, 2), 'utf-8')
+}
 
 export function recalcOkrProgress(okrId: string): void {
   const krs = keyResults.filter(kr => kr.okr_id === okrId)
@@ -186,6 +289,7 @@ export function recalcOkrProgress(okrId: string): void {
   if (okr) {
     okr.overall_progress = Math.round(avg * 100) / 100
     okr.updated_at = new Date().toISOString()
+    updateDependencyRisks(okrId)
   }
 }
 
@@ -200,3 +304,66 @@ export function findOkrById(id: string): OKR | undefined {
 export function findKeyResultById(id: string): KeyResult | undefined {
   return keyResults.find(kr => kr.id === id)
 }
+
+export function updateDependencyRisks(okrId: string): void {
+  const deps = dependencies.filter(d => d.depended_okr_id === okrId)
+  const dependedOkr = findOkrById(okrId)
+  if (!dependedOkr) return
+
+  for (const dep of deps) {
+    const progress = dependedOkr.overall_progress
+    let newStatus: Dependency['status'] = 'healthy'
+    if (progress < 15) {
+      newStatus = 'critical'
+    } else if (progress < 30) {
+      newStatus = 'at_risk'
+    }
+
+    if (dep.status !== newStatus) {
+      dep.status = newStatus
+
+      if (newStatus === 'at_risk' || newStatus === 'critical') {
+        const dependentOkr = findOkrById(dep.dependent_okr_id)
+        if (dependentOkr) {
+          const riskLevel: Notification['risk_level'] = newStatus === 'critical' ? 'critical' : 'warning'
+          const message = `您依赖的OKR「${dependedOkr.title}」进度下降到${progress}%，风险等级：${newStatus}`
+          const now = new Date().toISOString()
+          notifications.push({
+            id: uuidv4(),
+            dependency_id: dep.id,
+            user_id: dependentOkr.owner_id,
+            message,
+            risk_level: riskLevel,
+            is_read: false,
+            created_at: now,
+          })
+        }
+      }
+    }
+  }
+  saveData()
+}
+
+export function isQuarterEnded(quarter: string, year: number): boolean {
+  const now = new Date()
+  let endDate: Date
+  switch (quarter) {
+    case 'Q1':
+      endDate = new Date(year, 2, 31)
+      break
+    case 'Q2':
+      endDate = new Date(year, 5, 30)
+      break
+    case 'Q3':
+      endDate = new Date(year, 8, 30)
+      break
+    case 'Q4':
+      endDate = new Date(year, 11, 31)
+      break
+    default:
+      return false
+  }
+  return now.getTime() > endDate.getTime()
+}
+
+loadData()

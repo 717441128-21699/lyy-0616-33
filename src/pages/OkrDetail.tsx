@@ -1,7 +1,7 @@
 import { useState, useEffect, useCallback } from 'react';
 import { useParams, useNavigate, Link } from 'react-router-dom';
-import { ArrowLeft, Edit3, Plus, Trash2, Archive, ChevronRight, Save } from 'lucide-react';
-import { fetchOkrById, fetchWeeklyUpdates, updateKeyResultProgress, deleteKeyResult, createKeyResult, updateOkr, archiveOkr, fetchOkrs } from '@/api';
+import { ArrowLeft, Edit3, Plus, Trash2, Archive, ChevronRight, Save, RefreshCw, ExternalLink } from 'lucide-react';
+import { fetchOkrById, fetchWeeklyUpdates, updateKeyResultProgress, deleteKeyResult, createKeyResult, updateOkr, archiveOkr, fetchOkrs, syncKeyResult, fetchOkrById as getOkrDetail } from '@/api';
 import type { OKRWithDetails, KeyResult, WeeklyUpdate, OKR } from '@/types';
 import ProgressRing from '@/components/ProgressRing';
 import ProgressBar from '@/components/ProgressBar';
@@ -15,8 +15,14 @@ const SL: Record<string, string> = { draft: '草稿', active: '进行中', compl
 function KrCard({ kr, okrId, onRefresh }: { kr: KeyResult; okrId: string; onRefresh: () => void }) {
   const [editing, setEditing] = useState(false);
   const [value, setValue] = useState(kr.current_value);
+  const [syncing, setSyncing] = useState(false);
   const save = async () => { await updateKeyResultProgress(okrId, kr.id, value); setEditing(false); onRefresh(); };
   const del = async () => { await deleteKeyResult(okrId, kr.id); onRefresh(); };
+  const handleSync = async () => {
+    setSyncing(true);
+    try { await syncKeyResult(okrId, kr.id); onRefresh(); }
+    finally { setSyncing(false); }
+  };
   return (
     <div className="bg-white rounded-xl shadow-sm border border-gray-100 p-4">
       <div className="flex items-start gap-4">
@@ -26,6 +32,9 @@ function KrCard({ kr, okrId, onRefresh }: { kr: KeyResult; okrId: string; onRefr
             <div><h4 className="font-medium text-gray-900">{kr.title}</h4><p className="text-sm text-gray-500 mt-0.5">{kr.current_value} / {kr.target_value} {kr.unit}</p></div>
             <span className={`text-[10px] px-1.5 py-0.5 rounded font-medium ${kr.update_method === 'manual' ? 'bg-gray-100 text-gray-600' : 'bg-brand-50 text-brand-700'}`}>{kr.update_method === 'manual' ? '手动' : '自动'}</span>
           </div>
+          {kr.update_method === 'auto' && kr.data_source_url && (
+            <div className="text-xs text-gray-400 mt-1 flex items-center gap-1"><ExternalLink className="w-3 h-3" />{kr.data_source_url}</div>
+          )}
           <div className="mt-2"><ProgressBar progress={kr.progress} height={6} /></div>
           <div className="flex items-center gap-2 mt-3">
             {editing ? (
@@ -34,7 +43,12 @@ function KrCard({ kr, okrId, onRefresh }: { kr: KeyResult; okrId: string; onRefr
             ) : (
               <button onClick={() => { setEditing(true); setValue(kr.current_value); }} className="text-xs font-medium text-brand-600 hover:text-brand-800 px-2 py-1 rounded hover:bg-brand-50 transition-colors">更新进度</button>
             )}
-            <button onClick={del} className="text-xs font-medium text-red-500 hover:text-red-700 px-2 py-1 rounded hover:bg-red-50 transition-colors flex items-center gap-1"><Trash2 className="w-3.5 h-3.5" />删除</button>
+            {kr.update_method === 'auto' && (
+              <button onClick={handleSync} disabled={syncing} className="text-xs font-medium text-accent-600 hover:text-accent-700 px-2 py-1 rounded hover:bg-accent-50 transition-colors flex items-center gap-1 disabled:opacity-50">
+                <RefreshCw className={`w-3.5 h-3.5 ${syncing ? 'animate-spin' : ''}`} />{syncing ? '同步中...' : '同步数据'}
+              </button>
+            )}
+            <button onClick={del} className="text-xs font-medium text-red-500 hover:text-red-700 px-2 py-1 rounded hover:bg-red-50 transition-colors flex items-center gap-1 ml-auto"><Trash2 className="w-3.5 h-3.5" />删除</button>
           </div>
         </div>
       </div>
@@ -67,17 +81,26 @@ export default function OkrDetail() {
   const { id } = useParams<{ id: string }>();
   const navigate = useNavigate();
   const [okr, setOkr] = useState<OKRWithDetails | null>(null);
+  const [parentOkr, setParentOkr] = useState<OKR | null>(null);
   const [updates, setUpdates] = useState<WeeklyUpdate[]>([]);
   const [children, setChildren] = useState<OKR[]>([]);
   const [showAddKr, setShowAddKr] = useState(false);
   const [editing, setEditing] = useState(false);
   const [editForm, setEditForm] = useState({ title: '', description: '', status: '' as OKRWithDetails['status'] });
-  const [krForm, setKrForm] = useState({ title: '', target_value: 100, unit: '', update_method: 'manual' as KeyResult['update_method'] });
+  const [krForm, setKrForm] = useState({ title: '', target_value: 100, unit: '', update_method: 'manual' as KeyResult['update_method'], data_source_url: '' });
 
   const load = useCallback(async () => {
     if (!id) return;
     const data = await fetchOkrById(id);
     setOkr(data);
+    if (data.parent_okr_id) {
+      try {
+        const parent = await getOkrDetail(data.parent_okr_id);
+        setParentOkr(parent);
+      } catch { setParentOkr(null); }
+    } else {
+      setParentOkr(null);
+    }
     const w = await fetchWeeklyUpdates({ okr_id: id });
     setUpdates(w);
     const c = await fetchOkrs({ parent_okr_id: id });
@@ -88,7 +111,14 @@ export default function OkrDetail() {
   if (!okr) return <div className="text-center py-12 text-gray-400">加载中...</div>;
 
   const handleEdit = async () => { if (!id) return; await updateOkr(id, editForm); setEditing(false); load(); };
-  const handleAddKr = async () => { if (!id || !krForm.title.trim()) return; await createKeyResult(id, krForm); setShowAddKr(false); setKrForm({ title: '', target_value: 100, unit: '', update_method: 'manual' }); load(); };
+  const handleAddKr = async () => {
+    if (!id || !krForm.title.trim()) return;
+    const payload = { ...krForm, data_source_url: krForm.update_method === 'auto' ? krForm.data_source_url || null : null };
+    await createKeyResult(id, payload);
+    setShowAddKr(false);
+    setKrForm({ title: '', target_value: 100, unit: '', update_method: 'manual', data_source_url: '' });
+    load();
+  };
   const handleArchive = async () => { if (!id) return; await archiveOkr(id); navigate('/okrs'); };
   const startEdit = () => { setEditForm({ title: okr.title, description: okr.description, status: okr.status }); setEditing(true); };
 
@@ -137,17 +167,43 @@ export default function OkrDetail() {
 
       <div className="bg-white rounded-xl shadow-sm border border-gray-100 p-6">
         <h3 className="text-lg font-display font-semibold text-gray-900 mb-4">对齐关系</h3>
-        <div className="space-y-3">
-          {okr.parent_okr_id ? (
-            <div className="flex items-center gap-2 text-sm"><span className="text-gray-500">上级OKR:</span><Link to={`/okrs/${okr.parent_okr_id}`} className="text-brand-600 hover:text-brand-800 font-medium flex items-center gap-1">查看详情<ChevronRight className="w-3 h-3" /></Link></div>
-          ) : <p className="text-sm text-gray-400">无上级OKR</p>}
-          {children.length > 0 && (
-            <div><span className="text-sm text-gray-500">下级OKR:</span>
-              <div className="mt-2 space-y-2">{children.map((c) => (
-                <Link key={c.id} to={`/okrs/${c.id}`} className="flex items-center justify-between p-2 rounded-lg hover:bg-gray-50 transition-colors text-sm"><span className="text-gray-900 font-medium">{c.title}</span><span className="text-xs text-gray-400">{c.overall_progress}%</span></Link>
-              ))}</div>
-            </div>
-          )}
+        <div className="space-y-4">
+          <div>
+            <span className="text-sm text-gray-500 mb-2 block">上级OKR</span>
+            {parentOkr ? (
+              <Link to={`/okrs/${parentOkr.id}`} className="flex items-center gap-3 p-3 rounded-lg border border-gray-100 hover:bg-gray-50 transition-colors">
+                <ProgressRing progress={parentOkr.overall_progress} size={40} strokeWidth={3} />
+                <div className="flex-1 min-w-0">
+                  <div className="flex items-center gap-2">
+                    <span className={`text-[10px] px-1.5 py-0.5 rounded font-medium ${LB[parentOkr.level as keyof typeof LB]}`}>{LL[parentOkr.level as keyof typeof LL]}</span>
+                    <h4 className="font-medium text-gray-900 truncate">{parentOkr.title}</h4>
+                  </div>
+                  <p className="text-xs text-gray-400 mt-0.5">{(parentOkr as any).owner_name || '未指定'}</p>
+                </div>
+                <ChevronRight className="w-4 h-4 text-gray-400" />
+              </Link>
+            ) : <p className="text-sm text-gray-400 p-3">无上级OKR</p>}
+          </div>
+          <div>
+            <span className="text-sm text-gray-500 mb-2 block">下级OKR</span>
+            {children.length > 0 ? (
+              <div className="space-y-2">
+                {children.map((c) => (
+                  <Link key={c.id} to={`/okrs/${c.id}`} className="flex items-center gap-3 p-3 rounded-lg border border-gray-100 hover:bg-gray-50 transition-colors">
+                    <ProgressRing progress={c.overall_progress} size={40} strokeWidth={3} />
+                    <div className="flex-1 min-w-0">
+                      <div className="flex items-center gap-2">
+                        <span className={`text-[10px] px-1.5 py-0.5 rounded font-medium ${LB[c.level as keyof typeof LB]}`}>{LL[c.level as keyof typeof LL]}</span>
+                        <h4 className="font-medium text-gray-900 truncate">{c.title}</h4>
+                      </div>
+                      <p className="text-xs text-gray-400 mt-0.5">{(c as any).owner_name || '未指定'}</p>
+                    </div>
+                    <ChevronRight className="w-4 h-4 text-gray-400" />
+                  </Link>
+                ))}
+              </div>
+            ) : <p className="text-sm text-gray-400 p-3">暂无下级OKR</p>}
+          </div>
         </div>
       </div>
 
@@ -169,6 +225,9 @@ export default function OkrDetail() {
             <div><label className="block text-sm font-medium text-gray-700 mb-1">单位</label><input value={krForm.unit} onChange={(e) => setKrForm({ ...krForm, unit: e.target.value })} className="w-full px-3 py-2 border border-gray-200 rounded-lg text-sm" placeholder="如: %, 个, 万元" /></div>
           </div>
           <div><label className="block text-sm font-medium text-gray-700 mb-1">更新方式</label><select value={krForm.update_method} onChange={(e) => setKrForm({ ...krForm, update_method: e.target.value as KeyResult['update_method'] })} className="w-full px-3 py-2 border border-gray-200 rounded-lg text-sm bg-white"><option value="manual">手动</option><option value="auto">自动</option></select></div>
+          {krForm.update_method === 'auto' && (
+            <div><label className="block text-sm font-medium text-gray-700 mb-1">数据源地址</label><input value={krForm.data_source_url} onChange={(e) => setKrForm({ ...krForm, data_source_url: e.target.value })} className="w-full px-3 py-2 border border-gray-200 rounded-lg text-sm" placeholder="https://..." /></div>
+          )}
           <button onClick={handleAddKr} disabled={!krForm.title.trim()} className="w-full py-2 bg-brand-800 text-white rounded-lg text-sm font-medium hover:bg-brand-900 disabled:opacity-50 disabled:cursor-not-allowed">添加</button>
         </div>
       </Modal>

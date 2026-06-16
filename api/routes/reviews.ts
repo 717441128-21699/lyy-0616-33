@@ -1,6 +1,6 @@
 import { Router, type Request, type Response } from 'express'
 import { v4 as uuidv4 } from 'uuid'
-import { reviews, krScores, findUserById, findOkrById } from '../db/store.js'
+import { reviews, krScores, findUserById, findOkrById, saveData } from '../db/store.js'
 
 const router = Router()
 
@@ -63,6 +63,7 @@ router.post('/', (req: Request, res: Response): void => {
       reviewed_at: now,
     }
     reviews.push(review)
+    saveData()
     res.status(201).json({ success: true, data: { ...review, kr_scores: createdKrScores } })
   } catch (error) {
     res.status(500).json({ success: false, error: 'Failed to create review' })

@@ -1,6 +1,6 @@
 import { Router, type Request, type Response } from 'express'
 import { v4 as uuidv4 } from 'uuid'
-import { weeklyUpdates, okrs, keyResults, recalcOkrProgress, findUserById } from '../db/store.js'
+import { weeklyUpdates, okrs, keyResults, recalcOkrProgress, findUserById, updateDependencyRisks, saveData } from '../db/store.js'
 
 const router = Router()
 
@@ -79,7 +79,9 @@ router.post('/', (req: Request, res: Response): void => {
       kr.progress = kr.target_value > 0 ? Math.min((kr_current_value / kr.target_value) * 100, 100) : 0
       kr.updated_at = now
       recalcOkrProgress(okr_id)
+      updateDependencyRisks(okr_id)
     }
+    saveData()
     res.status(201).json({ success: true, data: wu })
   } catch (error) {
     res.status(500).json({ success: false, error: 'Failed to create weekly update' })

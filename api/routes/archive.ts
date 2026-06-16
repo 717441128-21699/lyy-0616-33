@@ -1,12 +1,25 @@
 import { Router, type Request, type Response } from 'express'
-import { okrs, findOkrById, findUserById } from '../db/store.js'
+import { okrs, findOkrById, findUserById, isQuarterEnded, saveData } from '../db/store.js'
 
 const router = Router()
 
 router.get('/', (req: Request, res: Response): void => {
   try {
     const { quarter, year } = req.query
-    let filtered = okrs.filter(o => o.status === 'archived')
+    let needsSave = false
+    for (const okr of okrs) {
+      if (isQuarterEnded(okr.quarter, okr.year)) {
+        if (okr.status === 'active' || okr.status === 'completed') {
+          okr.status = 'archived'
+          okr.updated_at = new Date().toISOString()
+          needsSave = true
+        }
+      }
+    }
+    if (needsSave) {
+      saveData()
+    }
+    let filtered = okrs.filter(o => o.status === 'archived' && isQuarterEnded(o.quarter, o.year))
     if (quarter) filtered = filtered.filter(o => o.quarter === quarter)
     if (year) filtered = filtered.filter(o => o.year === Number(year))
     const result = filtered.map(o => {
@@ -25,6 +38,7 @@ router.post('/:id', (req: Request, res: Response): void => {
     if (!okr) { res.status(404).json({ success: false, error: 'OKR not found' }); return }
     okr.status = 'archived'
     okr.updated_at = new Date().toISOString()
+    saveData()
     const owner = findUserById(okr.owner_id)
     res.json({ success: true, data: { ...okr, owner_name: owner?.name ?? null } })
   } catch (error) {

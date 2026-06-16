@@ -1,4 +1,4 @@
-import { ReactNode } from 'react';
+import { ReactNode, useEffect } from 'react';
 import { Link, useLocation } from 'react-router-dom';
 import { LayoutDashboard, Target, CalendarCheck, Grid3x3, Star, Archive, Link2, Bell } from 'lucide-react';
 import { useNotificationStore } from '@/store/notificationStore';
@@ -16,6 +16,11 @@ const navItems = [
 export default function Layout({ children }: { children: ReactNode }) {
   const location = useLocation();
   const unreadCount = useNotificationStore((s) => s.unreadCount);
+  const fetchNotifications = useNotificationStore((s) => s.fetchNotifications);
+
+  useEffect(() => {
+    fetchNotifications();
+  }, [fetchNotifications, location.pathname]);
 
   const isActive = (path: string) => {
     if (path === '/') return location.pathname === '/';
