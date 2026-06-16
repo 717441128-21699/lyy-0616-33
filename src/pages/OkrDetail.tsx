@@ -1,0 +1,177 @@
+import { useState, useEffect, useCallback } from 'react';
+import { useParams, useNavigate, Link } from 'react-router-dom';
+import { ArrowLeft, Edit3, Plus, Trash2, Archive, ChevronRight, Save } from 'lucide-react';
+import { fetchOkrById, fetchWeeklyUpdates, updateKeyResultProgress, deleteKeyResult, createKeyResult, updateOkr, archiveOkr, fetchOkrs } from '@/api';
+import type { OKRWithDetails, KeyResult, WeeklyUpdate, OKR } from '@/types';
+import ProgressRing from '@/components/ProgressRing';
+import ProgressBar from '@/components/ProgressBar';
+import Modal from '@/components/Modal';
+
+const LB: Record<string, string> = { company: 'bg-blue-100 text-blue-700', department: 'bg-purple-100 text-purple-700', individual: 'bg-teal-100 text-teal-700' };
+const LL: Record<string, string> = { company: '公司级', department: '部门级', individual: '个人级' };
+const SB: Record<string, string> = { draft: 'bg-gray-100 text-gray-600', active: 'bg-green-100 text-green-700', completed: 'bg-blue-100 text-blue-700', archived: 'bg-yellow-100 text-yellow-700' };
+const SL: Record<string, string> = { draft: '草稿', active: '进行中', completed: '已完成', archived: '已归档' };
+
+function KrCard({ kr, okrId, onRefresh }: { kr: KeyResult; okrId: string; onRefresh: () => void }) {
+  const [editing, setEditing] = useState(false);
+  const [value, setValue] = useState(kr.current_value);
+  const save = async () => { await updateKeyResultProgress(okrId, kr.id, value); setEditing(false); onRefresh(); };
+  const del = async () => { await deleteKeyResult(okrId, kr.id); onRefresh(); };
+  return (
+    <div className="bg-white rounded-xl shadow-sm border border-gray-100 p-4">
+      <div className="flex items-start gap-4">
+        <ProgressRing progress={kr.progress} size={56} strokeWidth={4} />
+        <div className="flex-1 min-w-0">
+          <div className="flex items-start justify-between">
+            <div><h4 className="font-medium text-gray-900">{kr.title}</h4><p className="text-sm text-gray-500 mt-0.5">{kr.current_value} / {kr.target_value} {kr.unit}</p></div>
+            <span className={`text-[10px] px-1.5 py-0.5 rounded font-medium ${kr.update_method === 'manual' ? 'bg-gray-100 text-gray-600' : 'bg-brand-50 text-brand-700'}`}>{kr.update_method === 'manual' ? '手动' : '自动'}</span>
+          </div>
+          <div className="mt-2"><ProgressBar progress={kr.progress} height={6} /></div>
+          <div className="flex items-center gap-2 mt-3">
+            {editing ? (
+              <><input type="number" value={value} onChange={(e) => setValue(Number(e.target.value))} className="w-24 px-2 py-1 border border-gray-200 rounded text-sm" step="0.1" />
+              <button onClick={save} className="p-1 text-green-600 hover:bg-green-50 rounded"><Save className="w-4 h-4" /></button></>
+            ) : (
+              <button onClick={() => { setEditing(true); setValue(kr.current_value); }} className="text-xs font-medium text-brand-600 hover:text-brand-800 px-2 py-1 rounded hover:bg-brand-50 transition-colors">更新进度</button>
+            )}
+            <button onClick={del} className="text-xs font-medium text-red-500 hover:text-red-700 px-2 py-1 rounded hover:bg-red-50 transition-colors flex items-center gap-1"><Trash2 className="w-3.5 h-3.5" />删除</button>
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function WeekItem({ update }: { update: WeeklyUpdate }) {
+  const cc = update.confidence_index <= 3 ? 'bg-red-100 text-red-700' : update.confidence_index <= 6 ? 'bg-orange-100 text-orange-700' : 'bg-green-100 text-green-700';
+  return (
+    <div className="flex gap-4 relative pb-6">
+      <div className="flex flex-col items-center">
+        <div className="w-3 h-3 rounded-full bg-brand-500 ring-4 ring-brand-50 flex-shrink-0" />
+        <div className="w-0.5 flex-1 bg-gray-200" />
+      </div>
+      <div className="flex-1 -mt-1">
+        <div className="flex items-center gap-2 mb-1">
+          <span className="text-xs font-medium text-gray-500">第{update.week_number}周</span>
+          <span className={`text-[10px] px-1.5 py-0.5 rounded font-medium ${cc}`}>信心指数 {update.confidence_index}</span>
+          <span className="text-xs text-gray-400">{new Date(update.created_at).toLocaleDateString()}</span>
+        </div>
+        <p className="text-sm text-gray-700">{update.progress_description}</p>
+        <p className="text-xs text-gray-400 mt-1">KR当前值: {update.kr_current_value}</p>
+      </div>
+    </div>
+  );
+}
+
+export default function OkrDetail() {
+  const { id } = useParams<{ id: string }>();
+  const navigate = useNavigate();
+  const [okr, setOkr] = useState<OKRWithDetails | null>(null);
+  const [updates, setUpdates] = useState<WeeklyUpdate[]>([]);
+  const [children, setChildren] = useState<OKR[]>([]);
+  const [showAddKr, setShowAddKr] = useState(false);
+  const [editing, setEditing] = useState(false);
+  const [editForm, setEditForm] = useState({ title: '', description: '', status: '' as OKRWithDetails['status'] });
+  const [krForm, setKrForm] = useState({ title: '', target_value: 100, unit: '', update_method: 'manual' as KeyResult['update_method'] });
+
+  const load = useCallback(async () => {
+    if (!id) return;
+    const data = await fetchOkrById(id);
+    setOkr(data);
+    const w = await fetchWeeklyUpdates({ okr_id: id });
+    setUpdates(w);
+    const c = await fetchOkrs({ parent_okr_id: id });
+    setChildren(c);
+  }, [id]);
+
+  useEffect(() => { load(); }, [load]);
+  if (!okr) return <div className="text-center py-12 text-gray-400">加载中...</div>;
+
+  const handleEdit = async () => { if (!id) return; await updateOkr(id, editForm); setEditing(false); load(); };
+  const handleAddKr = async () => { if (!id || !krForm.title.trim()) return; await createKeyResult(id, krForm); setShowAddKr(false); setKrForm({ title: '', target_value: 100, unit: '', update_method: 'manual' }); load(); };
+  const handleArchive = async () => { if (!id) return; await archiveOkr(id); navigate('/okrs'); };
+  const startEdit = () => { setEditForm({ title: okr.title, description: okr.description, status: okr.status }); setEditing(true); };
+
+  return (
+    <div className="space-y-6">
+      <button onClick={() => navigate('/okrs')} className="flex items-center gap-1 text-sm text-gray-500 hover:text-brand-600 transition-colors"><ArrowLeft className="w-4 h-4" />返回列表</button>
+
+      <div className="bg-white rounded-xl shadow-sm border border-gray-100 p-6">
+        <div className="flex items-start justify-between">
+          <div className="flex items-center gap-4">
+            <ProgressRing progress={okr.overall_progress} size={72} />
+            <div>
+              <div className="flex items-center gap-2 mb-1">
+                <span className={`text-xs px-2 py-0.5 rounded-full font-medium ${LB[okr.level]}`}>{LL[okr.level]}</span>
+                <span className={`text-xs px-2 py-0.5 rounded-full font-medium ${SB[okr.status]}`}>{SL[okr.status]}</span>
+              </div>
+              {editing ? <input value={editForm.title} onChange={(e) => setEditForm({ ...editForm, title: e.target.value })} className="text-xl font-display font-bold text-gray-900 border-b border-brand-300 focus:outline-none" />
+                : <h2 className="text-xl font-display font-bold text-gray-900">{okr.title}</h2>}
+              {editing ? <textarea value={editForm.description} onChange={(e) => setEditForm({ ...editForm, description: e.target.value })} className="text-sm text-gray-600 mt-1 w-full border-b border-gray-200 focus:outline-none" rows={2} />
+                : <p className="text-sm text-gray-500 mt-1">{okr.description}</p>}
+              <p className="text-xs text-gray-400 mt-1">{okr.owner_name || '未指定'} · {okr.quarter} {okr.year}</p>
+            </div>
+          </div>
+          <div className="flex items-center gap-2">
+            {editing ? (
+              <><select value={editForm.status} onChange={(e) => setEditForm({ ...editForm, status: e.target.value as OKRWithDetails['status'] })} className="px-2 py-1 border border-gray-200 rounded text-sm bg-white"><option value="draft">草稿</option><option value="active">进行中</option><option value="completed">已完成</option></select>
+              <button onClick={handleEdit} className="px-3 py-1.5 bg-brand-800 text-white rounded-lg text-sm font-medium hover:bg-brand-900">保存</button>
+              <button onClick={() => setEditing(false)} className="px-3 py-1.5 bg-gray-100 text-gray-600 rounded-lg text-sm">取消</button></>
+            ) : (
+              <button onClick={startEdit} className="flex items-center gap-1 px-3 py-1.5 text-sm text-brand-600 hover:bg-brand-50 rounded-lg transition-colors"><Edit3 className="w-4 h-4" />编辑</button>
+            )}
+          </div>
+        </div>
+      </div>
+
+      <div>
+        <div className="flex items-center justify-between mb-4">
+          <h3 className="text-lg font-display font-semibold text-gray-900">关键结果</h3>
+          <button onClick={() => setShowAddKr(true)} className="flex items-center gap-1 px-3 py-1.5 bg-accent-500 text-white rounded-lg text-sm font-medium hover:bg-accent-600"><Plus className="w-4 h-4" />添加KR</button>
+        </div>
+        <div className="space-y-3">
+          {okr.key_results.map((kr) => <KrCard key={kr.id} kr={kr} okrId={okr.id} onRefresh={load} />)}
+          {okr.key_results.length === 0 && <p className="text-gray-400 text-sm text-center py-6">暂无关键结果</p>}
+        </div>
+      </div>
+
+      <div className="bg-white rounded-xl shadow-sm border border-gray-100 p-6">
+        <h3 className="text-lg font-display font-semibold text-gray-900 mb-4">对齐关系</h3>
+        <div className="space-y-3">
+          {okr.parent_okr_id ? (
+            <div className="flex items-center gap-2 text-sm"><span className="text-gray-500">上级OKR:</span><Link to={`/okrs/${okr.parent_okr_id}`} className="text-brand-600 hover:text-brand-800 font-medium flex items-center gap-1">查看详情<ChevronRight className="w-3 h-3" /></Link></div>
+          ) : <p className="text-sm text-gray-400">无上级OKR</p>}
+          {children.length > 0 && (
+            <div><span className="text-sm text-gray-500">下级OKR:</span>
+              <div className="mt-2 space-y-2">{children.map((c) => (
+                <Link key={c.id} to={`/okrs/${c.id}`} className="flex items-center justify-between p-2 rounded-lg hover:bg-gray-50 transition-colors text-sm"><span className="text-gray-900 font-medium">{c.title}</span><span className="text-xs text-gray-400">{c.overall_progress}%</span></Link>
+              ))}</div>
+            </div>
+          )}
+        </div>
+      </div>
+
+      <div className="bg-white rounded-xl shadow-sm border border-gray-100 p-6">
+        <h3 className="text-lg font-display font-semibold text-gray-900 mb-4">周报更新</h3>
+        {updates.length === 0 ? <p className="text-gray-400 text-sm text-center py-6">暂无周报更新</p>
+          : <div>{updates.map((u) => <WeekItem key={u.id} update={u} />)}</div>}
+      </div>
+
+      {okr.status === 'completed' && (
+        <button onClick={handleArchive} className="flex items-center gap-2 px-4 py-2 bg-yellow-500 text-white rounded-lg text-sm font-medium hover:bg-yellow-600 transition-colors"><Archive className="w-4 h-4" />归档此OKR</button>
+      )}
+
+      <Modal isOpen={showAddKr} onClose={() => setShowAddKr(false)} title="添加关键结果">
+        <div className="space-y-4">
+          <div><label className="block text-sm font-medium text-gray-700 mb-1">标题</label><input value={krForm.title} onChange={(e) => setKrForm({ ...krForm, title: e.target.value })} className="w-full px-3 py-2 border border-gray-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-brand-500" placeholder="输入KR标题" /></div>
+          <div className="grid grid-cols-2 gap-3">
+            <div><label className="block text-sm font-medium text-gray-700 mb-1">目标值</label><input type="number" value={krForm.target_value} onChange={(e) => setKrForm({ ...krForm, target_value: Number(e.target.value) })} className="w-full px-3 py-2 border border-gray-200 rounded-lg text-sm" /></div>
+            <div><label className="block text-sm font-medium text-gray-700 mb-1">单位</label><input value={krForm.unit} onChange={(e) => setKrForm({ ...krForm, unit: e.target.value })} className="w-full px-3 py-2 border border-gray-200 rounded-lg text-sm" placeholder="如: %, 个, 万元" /></div>
+          </div>
+          <div><label className="block text-sm font-medium text-gray-700 mb-1">更新方式</label><select value={krForm.update_method} onChange={(e) => setKrForm({ ...krForm, update_method: e.target.value as KeyResult['update_method'] })} className="w-full px-3 py-2 border border-gray-200 rounded-lg text-sm bg-white"><option value="manual">手动</option><option value="auto">自动</option></select></div>
+          <button onClick={handleAddKr} disabled={!krForm.title.trim()} className="w-full py-2 bg-brand-800 text-white rounded-lg text-sm font-medium hover:bg-brand-900 disabled:opacity-50 disabled:cursor-not-allowed">添加</button>
+        </div>
+      </Modal>
+    </div>
+  );
+}
