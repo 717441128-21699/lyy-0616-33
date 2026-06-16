@@ -1,6 +1,6 @@
 import { Router, type Request, type Response } from 'express'
 import { v4 as uuidv4 } from 'uuid'
-import { dependencies, notifications, findOkrById, findUserById, saveData } from '../db/store.js'
+import { dependencies, notifications, findOkrById, findUserById, saveData, activityLogs, okrs } from '../db/store.js'
 import type { Dependency, Notification } from '../db/store.js'
 
 const router = Router()
@@ -175,6 +175,53 @@ router.post('/', (req: Request, res: Response): void => {
     res.status(201).json({ success: true, data: dep })
   } catch (error) {
     res.status(500).json({ success: false, error: 'Failed to create dependency' })
+  }
+})
+
+router.get('/:id/impact', (req: Request, res: Response): void => {
+  try {
+    const dep = dependencies.find(d => d.id === req.params.id)
+    if (!dep) { res.status(404).json({ success: false, error: 'Dependency not found' }); return }
+
+    const dependentOkr = findOkrById(dep.dependent_okr_id)
+    const dependedOkr = findOkrById(dep.depended_okr_id)
+
+    const depNotifications = notifications
+      .filter(n => n.dependency_id === dep.id)
+      .sort((a, b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime())
+      .slice(0, 5)
+      .map(n => {
+        const user = findUserById(n.user_id)
+        return { id: n.id, message: n.message, risk_level: n.risk_level, is_read: n.is_read, user_name: user?.name ?? null, created_at: n.created_at }
+      })
+
+    const depActivityLogs = activityLogs
+      .filter(l => (l.okr_id === dep.dependent_okr_id || l.okr_id === dep.depended_okr_id) && (l.type === 'kr_update' || l.type === 'kr_sync' || l.type === 'status_change' || l.type === 'dependency_risk'))
+      .sort((a, b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime())
+      .slice(0, 8)
+      .map(l => ({ id: l.id, type: l.type, description: l.description, okr_id: l.okr_id, old_value: l.old_value, new_value: l.new_value, created_at: l.created_at }))
+
+    const downstreamOkrs = okrs.filter(o => o.parent_okr_id === dep.dependent_okr_id).map(o => ({
+      id: o.id,
+      title: o.title,
+      level: o.level,
+      overall_progress: o.overall_progress,
+      status: o.status,
+    }))
+
+    res.json({
+      success: true,
+      data: {
+        dependency: dep,
+        dependent_okr: dependentOkr ? { id: dependentOkr.id, title: dependentOkr.title, level: dependentOkr.level, overall_progress: dependentOkr.overall_progress, status: dependentOkr.status, owner_name: findUserById(dependentOkr.owner_id)?.name ?? null } : null,
+        depended_okr: dependedOkr ? { id: dependedOkr.id, title: dependedOkr.title, level: dependedOkr.level, overall_progress: dependedOkr.overall_progress, status: dependedOkr.status, owner_name: findUserById(dependedOkr.owner_id)?.name ?? null } : null,
+        notifications: depNotifications,
+        activity_logs: depActivityLogs,
+        downstream_okrs: downstreamOkrs,
+      },
+    })
+  } catch (error) {
+    res.status(500).json({ success: false, error: 'Failed to fetch impact chain' })
   }
 })
 

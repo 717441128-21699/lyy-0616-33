@@ -1,5 +1,5 @@
 import { Router, type Request, type Response } from 'express'
-import { users, okrs, departments, dependencies } from '../db/store.js'
+import { users, okrs, departments, dependencies, activityLogs, weeklyUpdates, findOkrById, findUserById } from '../db/store.js'
 
 const router = Router()
 
@@ -54,6 +54,106 @@ router.get('/', (req: Request, res: Response): void => {
     res.json({ success: true, data: { members, okrs: okrList } })
   } catch (error) {
     res.status(500).json({ success: false, error: 'Failed to fetch heatmap data' })
+  }
+})
+
+router.get('/trends', (req: Request, res: Response): void => {
+  try {
+    const { quarter, year, department_id } = req.query
+    if (!quarter || !year) {
+      res.status(400).json({ success: false, error: 'Quarter and year are required' })
+      return
+    }
+    const q = quarter as string
+    const y = Number(year)
+
+    let filteredOkrs = okrs.filter(o => o.quarter === q && o.year === y && o.status !== 'draft')
+    if (department_id) filteredOkrs = filteredOkrs.filter(o => o.department_id === department_id)
+
+    const trendData = filteredOkrs.map(okr => {
+      const owner = findUserById(okr.owner_id)
+      const logs = activityLogs
+        .filter(l => l.okr_id === okr.id)
+        .sort((a, b) => new Date(a.created_at).getTime() - new Date(b.created_at).getTime())
+
+      const weekly = weeklyUpdates
+        .filter(w => w.okr_id === okr.id && w.year === y)
+        .sort((a, b) => new Date(a.created_at).getTime() - new Date(b.created_at).getTime())
+
+      type TrendPoint = { date: string; progress: number; type: string; id: string; description: string }
+      const points: TrendPoint[] = []
+
+      logs.forEach(log => {
+        if (log.type === 'kr_update' || log.type === 'kr_sync') {
+          const match = log.new_value?.match(/(\d+(?:\.\d+)?)%/)
+          if (match) {
+            points.push({
+              date: log.created_at,
+              progress: parseFloat(match[1]),
+              type: log.type,
+              id: log.id,
+              description: log.description,
+            })
+          }
+        }
+      })
+
+      weekly.forEach(w => {
+        points.push({
+          date: w.created_at,
+          progress: -1,
+          type: 'weekly_update',
+          id: w.id,
+          description: w.progress_description,
+        })
+      })
+
+      logs.forEach(log => {
+        if (log.type === 'dependency_risk') {
+          points.push({
+            date: log.created_at,
+            progress: -1,
+            type: 'risk_change',
+            id: log.id,
+            description: log.description,
+          })
+        }
+      })
+
+      points.sort((a, b) => new Date(a.date).getTime() - new Date(b.date).getTime())
+
+      const progressPoints = points.filter(p => p.progress >= 0)
+
+      let lowest: TrendPoint | null = null
+      if (progressPoints.length >= 2) {
+        for (let i = 1; i < progressPoints.length; i++) {
+          const diff = progressPoints[i].progress - progressPoints[i - 1].progress
+          if (diff < 0) {
+            if (!lowest || diff < (lowest.progress > 0 ? 0 : diff)) {
+              lowest = progressPoints[i - 1]
+            }
+          }
+        }
+      }
+
+      return {
+        okr_id: okr.id,
+        title: okr.title,
+        level: okr.level,
+        owner_name: owner?.name ?? null,
+        current_progress: okr.overall_progress,
+        risk_status: getOkrRiskStatus(okr.id),
+        points,
+        progress_points: progressPoints,
+        lowest_dip: lowest,
+        weekly_count: weekly.length,
+        log_count: logs.length,
+      }
+    })
+
+    res.json({ success: true, data: trendData })
+  } catch (error) {
+    res.status(500).json({ success: false, error: 'Failed to fetch trend data' })
   }
 })
 

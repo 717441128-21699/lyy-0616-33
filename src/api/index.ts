@@ -141,6 +141,19 @@ export async function deleteDependency(id: string): Promise<void> {
   await request<void>(`/api/dependencies/${id}`, { method: 'DELETE' });
 }
 
+export interface ImpactChainData {
+  dependency: { id: string; dependent_okr_id: string; depended_okr_id: string; status: string; created_at: string };
+  dependent_okr: { id: string; title: string; level: string; overall_progress: number; status: string; owner_name: string | null } | null;
+  depended_okr: { id: string; title: string; level: string; overall_progress: number; status: string; owner_name: string | null } | null;
+  notifications: Array<{ id: string; message: string; risk_level: string; is_read: boolean; user_name: string | null; created_at: string }>;
+  activity_logs: Array<{ id: string; type: string; description: string; okr_id: string; old_value: string | null; new_value: string | null; created_at: string }>;
+  downstream_okrs: Array<{ id: string; title: string; level: string; overall_progress: number; status: string }>;
+}
+
+export async function fetchDependencyImpact(id: string): Promise<ImpactChainData> {
+  return request<ImpactChainData>(`/api/dependencies/${id}/impact`);
+}
+
 export async function fetchNotifications(params?: Record<string, string>): Promise<Notification[]> {
   return request<Notification[]>(`/api/dependencies/notifications${buildQuery(params)}`);
 }
@@ -229,4 +242,30 @@ export async function fetchQuarterlyReport(quarter: string, year: number): Promi
 
 export async function fetchActivityLogs(okrId: string): Promise<ActivityLog[]> {
   return request<ActivityLog[]>(`/api/activity/${okrId}`);
+}
+
+export interface TrendPoint {
+  date: string;
+  progress: number;
+  type: string;
+  id: string;
+  description: string;
+}
+
+export interface OkrTrend {
+  okr_id: string;
+  title: string;
+  level: string;
+  owner_name: string | null;
+  current_progress: number;
+  risk_status: string | null;
+  points: TrendPoint[];
+  progress_points: TrendPoint[];
+  lowest_dip: TrendPoint | null;
+  weekly_count: number;
+  log_count: number;
+}
+
+export async function fetchTrends(params: Record<string, string>): Promise<OkrTrend[]> {
+  return request<OkrTrend[]>(`/api/heatmap/trends${buildQuery(params)}`);
 }

@@ -1,8 +1,8 @@
 import { useState, useEffect, useCallback, useMemo } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { Link2, Plus, Trash2, Bell, ArrowRight, ShieldAlert, CheckSquare, Filter, ChevronRight, Users } from 'lucide-react';
+import { Link2, Plus, Trash2, Bell, ArrowRight, ShieldAlert, CheckSquare, Filter, ChevronRight, Users, ChevronDown, Activity, FileText, Target } from 'lucide-react';
 import type { OKR, Dependency, DependencyGraphData, Notification } from '@/types';
-import { fetchOkrs, fetchDependencies, fetchDependencyGraph, createDependency, deleteDependency } from '@/api';
+import { fetchOkrs, fetchDependencies, fetchDependencyGraph, createDependency, deleteDependency, fetchDependencyImpact, type ImpactChainData } from '@/api';
 import ProgressRing from '@/components/ProgressRing';
 import ProgressBar from '@/components/ProgressBar';
 import Modal from '@/components/Modal';
@@ -47,6 +47,9 @@ export default function Dependencies() {
   const [depOkrId, setDepOkrId] = useState('');
   const [dedOkrId, setDedOkrId] = useState('');
   const [submitting, setSubmitting] = useState(false);
+  const [expandedDepId, setExpandedDepId] = useState<string | null>(null);
+  const [impactData, setImpactData] = useState<ImpactChainData | null>(null);
+  const [impactLoading, setImpactLoading] = useState(false);
   const [selectedNotifs, setSelectedNotifs] = useState<string[]>([]);
   const [notifFilters, setNotifFilters] = useState({
     is_read: '',
@@ -124,6 +127,24 @@ export default function Dependencies() {
   const handleDelete = async (id: string) => {
     await deleteDependency(id);
     await loadData();
+  };
+
+  const handleExpandDep = async (depId: string) => {
+    if (expandedDepId === depId) {
+      setExpandedDepId(null);
+      setImpactData(null);
+      return;
+    }
+    setExpandedDepId(depId);
+    setImpactLoading(true);
+    try {
+      const data = await fetchDependencyImpact(depId);
+      setImpactData(data);
+    } catch {
+      setImpactData(null);
+    } finally {
+      setImpactLoading(false);
+    }
   };
 
   const toggleNotifSelect = (id: string) => {
@@ -254,58 +275,210 @@ export default function Dependencies() {
           {deps.length > 0 ? (
             <div className="space-y-2">
               {deps.map((dep: any) => (
-                <div
-                  key={dep.id}
-                  className="flex items-center gap-3 p-3 rounded-lg border border-gray-200 hover:border-gray-300 hover:bg-gray-50/50 transition-all"
-                >
-                  <div className="flex-1 min-w-0">
-                    <div
-                      onClick={() => navigate(`/okrs/${dep.dependent_okr_id}`)}
-                      className="cursor-pointer hover:text-brand-600 transition-colors"
-                    >
-                      <p className="text-sm font-medium text-gray-800 truncate">{dep.dependent_okr_title}</p>
-                      <div className="flex items-center gap-2 mt-0.5">
-                        <span className={`text-[10px] px-1.5 py-0.5 rounded font-medium ${levelBadge(dep.dependent_okr_level || 'individual')}`}>
-                          {levelLabel(dep.dependent_okr_level || 'individual')}
-                        </span>
-                        <span className="text-xs text-gray-500">{dep.dependent_owner_name || ''}</span>
-                        {dep.dependent_okr_progress !== null && (
-                          <div className="w-16">
-                            <ProgressBar progress={dep.dependent_okr_progress} height={4} />
-                          </div>
-                        )}
-                      </div>
-                    </div>
-                  </div>
-                  <div className="flex items-center gap-2 flex-shrink-0">
-                    <ArrowRight className="w-4 h-4 text-gray-300" />
-                  </div>
-                  <div className="flex-1 min-w-0">
-                    <div
-                      onClick={() => navigate(`/okrs/${dep.depended_okr_id}`)}
-                      className="cursor-pointer hover:text-brand-600 transition-colors"
-                    >
-                      <p className="text-sm font-medium text-gray-800 truncate">{dep.depended_okr_title}</p>
-                      <div className="flex items-center gap-2 mt-0.5">
-                        <span className={`text-[10px] px-1.5 py-0.5 rounded font-medium ${levelBadge(dep.depended_okr_level || 'individual')}`}>
-                          {levelLabel(dep.depended_okr_level || 'individual')}
-                        </span>
-                        <span className="text-xs text-gray-500">{dep.depended_owner_name || ''}</span>
-                        {dep.depended_okr_progress !== null && (
-                          <div className="w-16">
-                            <ProgressBar progress={dep.depended_okr_progress} height={4} />
-                          </div>
-                        )}
-                      </div>
-                    </div>
-                  </div>
-                  <span className={`text-xs font-bold px-2.5 py-0.5 rounded-full flex-shrink-0 ${statusBadge(dep.status)}`}>{statusLabel(dep.status)}</span>
-                  <button
-                    onClick={() => handleDelete(dep.id)}
-                    className="text-gray-400 hover:text-red-500 transition-colors p-1 flex-shrink-0"
+                <div key={dep.id}>
+                  <div
+                    className="flex items-center gap-3 p-3 rounded-lg border border-gray-200 hover:border-gray-300 hover:bg-gray-50/50 transition-all"
                   >
-                    <Trash2 className="w-4 h-4" />
-                  </button>
+                    <div className="flex-1 min-w-0">
+                      <div
+                        onClick={() => navigate(`/okrs/${dep.dependent_okr_id}`)}
+                        className="cursor-pointer hover:text-brand-600 transition-colors"
+                      >
+                        <p className="text-sm font-medium text-gray-800 truncate">{dep.dependent_okr_title}</p>
+                        <div className="flex items-center gap-2 mt-0.5">
+                          <span className={`text-[10px] px-1.5 py-0.5 rounded font-medium ${levelBadge(dep.dependent_okr_level || 'individual')}`}>
+                            {levelLabel(dep.dependent_okr_level || 'individual')}
+                          </span>
+                          <span className="text-xs text-gray-500">{dep.dependent_owner_name || ''}</span>
+                          {dep.dependent_okr_progress !== null && (
+                            <div className="w-16">
+                              <ProgressBar progress={dep.dependent_okr_progress} height={4} />
+                            </div>
+                          )}
+                        </div>
+                      </div>
+                    </div>
+                    <div className="flex items-center gap-2 flex-shrink-0">
+                      <ArrowRight className="w-4 h-4 text-gray-300" />
+                    </div>
+                    <div className="flex-1 min-w-0">
+                      <div
+                        onClick={() => navigate(`/okrs/${dep.depended_okr_id}`)}
+                        className="cursor-pointer hover:text-brand-600 transition-colors"
+                      >
+                        <p className="text-sm font-medium text-gray-800 truncate">{dep.depended_okr_title}</p>
+                        <div className="flex items-center gap-2 mt-0.5">
+                          <span className={`text-[10px] px-1.5 py-0.5 rounded font-medium ${levelBadge(dep.depended_okr_level || 'individual')}`}>
+                            {levelLabel(dep.depended_okr_level || 'individual')}
+                          </span>
+                          <span className="text-xs text-gray-500">{dep.depended_owner_name || ''}</span>
+                          {dep.depended_okr_progress !== null && (
+                            <div className="w-16">
+                              <ProgressBar progress={dep.depended_okr_progress} height={4} />
+                            </div>
+                          )}
+                        </div>
+                      </div>
+                    </div>
+                    <span className={`text-xs font-bold px-2.5 py-0.5 rounded-full flex-shrink-0 ${statusBadge(dep.status)}`}>{statusLabel(dep.status)}</span>
+                    <button
+                      onClick={() => handleExpandDep(dep.id)}
+                      className={`text-gray-400 hover:text-brand-600 transition-all p-1 flex-shrink-0 ${expandedDepId === dep.id ? 'text-brand-600 rotate-180' : ''}`}
+                      title="查看影响链路"
+                    >
+                      <ChevronDown className="w-4 h-4" />
+                    </button>
+                    <button
+                      onClick={() => handleDelete(dep.id)}
+                      className="text-gray-400 hover:text-red-500 transition-colors p-1 flex-shrink-0"
+                    >
+                      <Trash2 className="w-4 h-4" />
+                    </button>
+                  </div>
+
+                  {expandedDepId === dep.id && (
+                    <div className="mt-1 ml-4 mr-2 p-4 bg-gray-50 rounded-lg border border-gray-200">
+                      {impactLoading ? (
+                        <div className="py-6 text-center">
+                          <div className="animate-spin w-6 h-6 border-2 border-brand-600 border-t-transparent rounded-full mx-auto mb-2" />
+                          <p className="text-xs text-gray-500">加载影响链路...</p>
+                        </div>
+                      ) : impactData ? (
+                        <div className="space-y-4">
+                          <div className="flex items-center gap-2 text-sm font-semibold text-gray-700">
+                            <Activity className="w-4 h-4 text-brand-600" />
+                            影响链路
+                          </div>
+
+                          <div className="grid grid-cols-2 gap-3">
+                            {impactData.dependent_okr && (
+                              <div className="bg-white rounded-lg p-3 border border-gray-100">
+                                <p className="text-[10px] text-gray-400 mb-1 uppercase tracking-wide">依赖方</p>
+                                <div
+                                  onClick={() => navigate(`/okrs/${impactData.dependent_okr!.id}`)}
+                                  className="cursor-pointer hover:text-brand-600 transition-colors"
+                                >
+                                  <p className="text-sm font-medium text-gray-800 truncate">{impactData.dependent_okr.title}</p>
+                                  <div className="flex items-center gap-2 mt-1">
+                                    <span className={`text-[10px] px-1.5 py-0.5 rounded font-medium ${levelBadge(impactData.dependent_okr.level)}`}>{levelLabel(impactData.dependent_okr.level)}</span>
+                                    <span className="text-xs text-gray-500">{impactData.dependent_okr.owner_name}</span>
+                                    <span className="text-xs text-gray-400">{impactData.dependent_okr.overall_progress.toFixed(1)}%</span>
+                                  </div>
+                                </div>
+                              </div>
+                            )}
+                            {impactData.depended_okr && (
+                              <div className="bg-white rounded-lg p-3 border border-gray-100">
+                                <p className="text-[10px] text-gray-400 mb-1 uppercase tracking-wide">被依赖方</p>
+                                <div
+                                  onClick={() => navigate(`/okrs/${impactData.depended_okr!.id}`)}
+                                  className="cursor-pointer hover:text-brand-600 transition-colors"
+                                >
+                                  <p className="text-sm font-medium text-gray-800 truncate">{impactData.depended_okr.title}</p>
+                                  <div className="flex items-center gap-2 mt-1">
+                                    <span className={`text-[10px] px-1.5 py-0.5 rounded font-medium ${levelBadge(impactData.depended_okr.level)}`}>{levelLabel(impactData.depended_okr.level)}</span>
+                                    <span className="text-xs text-gray-500">{impactData.depended_okr.owner_name}</span>
+                                    <span className="text-xs text-gray-400">{impactData.depended_okr.overall_progress.toFixed(1)}%</span>
+                                  </div>
+                                </div>
+                              </div>
+                            )}
+                          </div>
+
+                          {impactData.notifications.length > 0 && (
+                            <div>
+                              <p className="text-xs font-semibold text-gray-600 mb-2 flex items-center gap-1.5">
+                                <Bell className="w-3.5 h-3.5 text-orange-500" />
+                                风险通知 ({impactData.notifications.length})
+                              </p>
+                              <div className="space-y-1.5">
+                                {impactData.notifications.map(n => (
+                                  <div key={n.id} className="flex items-start gap-2 p-2 bg-white rounded-lg border border-gray-100 text-xs">
+                                    <span className={`px-1.5 py-0.5 rounded text-[10px] font-bold flex-shrink-0 ${n.risk_level === 'critical' ? 'bg-red-100 text-red-700' : n.risk_level === 'warning' ? 'bg-orange-100 text-orange-700' : 'bg-blue-100 text-blue-700'}`}>
+                                      {n.risk_level === 'critical' ? '严重' : n.risk_level === 'warning' ? '警告' : '提示'}
+                                    </span>
+                                    <div className="flex-1 min-w-0">
+                                      <p className="text-gray-700">{n.message}</p>
+                                      <p className="text-gray-400 mt-0.5">{n.user_name} · {new Date(n.created_at).toLocaleDateString('zh-CN')}</p>
+                                    </div>
+                                    {!n.is_read && <span className="w-1.5 h-1.5 rounded-full bg-orange-500 flex-shrink-0 mt-1.5" />}
+                                  </div>
+                                ))}
+                              </div>
+                            </div>
+                          )}
+
+                          {impactData.activity_logs.length > 0 && (
+                            <div>
+                              <p className="text-xs font-semibold text-gray-600 mb-2 flex items-center gap-1.5">
+                                <FileText className="w-3.5 h-3.5 text-brand-500" />
+                                相关变更 ({impactData.activity_logs.length})
+                              </p>
+                              <div className="space-y-1.5">
+                                {impactData.activity_logs.map(l => (
+                                  <div key={l.id} className="flex items-start gap-2 p-2 bg-white rounded-lg border border-gray-100 text-xs">
+                                    <span className={`px-1.5 py-0.5 rounded text-[10px] font-medium flex-shrink-0 ${
+                                      l.type === 'kr_update' ? 'bg-blue-50 text-blue-700' :
+                                      l.type === 'kr_sync' ? 'bg-accent-50 text-accent-700' :
+                                      l.type === 'dependency_risk' ? 'bg-orange-50 text-orange-700' :
+                                      'bg-gray-50 text-gray-700'
+                                    }`}>
+                                      {l.type === 'kr_update' ? 'KR更新' : l.type === 'kr_sync' ? '自动同步' : l.type === 'dependency_risk' ? '风险变更' : '状态变更'}
+                                    </span>
+                                    <div className="flex-1 min-w-0">
+                                      <p className="text-gray-700">{l.description}</p>
+                                      {l.old_value && l.new_value && (
+                                        <div className="flex items-center gap-1 mt-0.5">
+                                          <span className="text-gray-400">{l.old_value}</span>
+                                          <ChevronRight className="w-3 h-3 text-gray-300" />
+                                          <span className="text-green-700 font-medium">{l.new_value}</span>
+                                        </div>
+                                      )}
+                                    </div>
+                                    <span className="text-gray-400 flex-shrink-0">{new Date(l.created_at).toLocaleDateString('zh-CN')}</span>
+                                  </div>
+                                ))}
+                              </div>
+                            </div>
+                          )}
+
+                          {impactData.downstream_okrs.length > 0 && (
+                            <div>
+                              <p className="text-xs font-semibold text-gray-600 mb-2 flex items-center gap-1.5">
+                                <Target className="w-3.5 h-3.5 text-purple-500" />
+                                受影响的下级目标 ({impactData.downstream_okrs.length})
+                              </p>
+                              <div className="space-y-1.5">
+                                {impactData.downstream_okrs.map(o => (
+                                  <div
+                                    key={o.id}
+                                    onClick={() => navigate(`/okrs/${o.id}`)}
+                                    className="flex items-center gap-2 p-2 bg-white rounded-lg border border-gray-100 text-xs cursor-pointer hover:border-brand-200 transition-colors"
+                                  >
+                                    <ProgressRing progress={o.overall_progress} size={28} strokeWidth={2} />
+                                    <div className="flex-1 min-w-0">
+                                      <p className="text-gray-700 font-medium truncate">{o.title}</p>
+                                      <div className="flex items-center gap-2 mt-0.5">
+                                        <span className={`text-[10px] px-1.5 py-0.5 rounded font-medium ${levelBadge(o.level)}`}>{levelLabel(o.level)}</span>
+                                        <span className="text-gray-400">{o.overall_progress.toFixed(1)}%</span>
+                                      </div>
+                                    </div>
+                                    <ChevronRight className="w-3 h-3 text-gray-300" />
+                                  </div>
+                                ))}
+                              </div>
+                            </div>
+                          )}
+
+                          {impactData.notifications.length === 0 && impactData.activity_logs.length === 0 && impactData.downstream_okrs.length === 0 && (
+                            <p className="text-xs text-gray-400 text-center py-4">暂无关联数据</p>
+                          )}
+                        </div>
+                      ) : (
+                        <p className="text-xs text-gray-400 text-center py-4">加载失败</p>
+                      )}
+                    </div>
+                  )}
                 </div>
               ))}
             </div>

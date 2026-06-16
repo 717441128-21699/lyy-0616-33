@@ -1,7 +1,7 @@
 import { useState, useEffect, useCallback, useMemo } from 'react';
 import { useParams, useNavigate, useLocation, Link } from 'react-router-dom';
-import { ArrowLeft, Edit3, Plus, Trash2, Archive, ChevronRight, Save, RefreshCw, ExternalLink, Activity, FileText, AlertTriangle, Zap, Clock, X, MapPin } from 'lucide-react';
-import { fetchOkrById, fetchWeeklyUpdates, updateKeyResultProgress, deleteKeyResult, createKeyResult, updateOkr, archiveOkr, fetchOkrs, syncKeyResult, fetchOkrById as getOkrDetail, fetchActivityLogs } from '@/api';
+import { ArrowLeft, Edit3, Plus, Trash2, Archive, ChevronRight, Save, RefreshCw, ExternalLink, Activity, FileText, AlertTriangle, Zap, Clock, X, MapPin, Copy, CheckCircle2, ClipboardList } from 'lucide-react';
+import { fetchOkrById, fetchWeeklyUpdates, updateKeyResultProgress, deleteKeyResult, createKeyResult, updateOkr, archiveOkr, fetchOkrs, syncKeyResult, fetchOkrById as getOkrDetail, fetchActivityLogs, fetchReviewsByOkr, fetchDependencies } from '@/api';
 import type { OKRWithDetails, KeyResult, WeeklyUpdate, OKR, ActivityLog } from '@/types';
 import ProgressRing from '@/components/ProgressRing';
 import ProgressBar from '@/components/ProgressBar';
@@ -86,6 +86,70 @@ export default function OkrDetail() {
   const [highlightKrId, setHighlightKrId] = useState<string | null>(null);
   const [dismissContext, setDismissContext] = useState(false);
   const [expandedLogs, setExpandedLogs] = useState<Set<string>>(new Set());
+  const [showReviewAssistant, setShowReviewAssistant] = useState(false);
+  const [copied, setCopied] = useState(false);
+
+  const reviewAssistantData = useMemo(() => {
+    if (!okr) return null;
+    const laggingKrs = okr.key_results.filter(kr => kr.progress < 50).sort((a, b) => a.progress - b.progress);
+    const recentWeekly = updates.slice(0, 3);
+    const riskLogs = activityLogs.filter(l => l.type === 'dependency_risk');
+    const reviewLogs = activityLogs.filter(l => l.type === 'review');
+    return { laggingKrs, recentWeekly, riskLogs, reviewLogs };
+  }, [okr, updates, activityLogs]);
+
+  const reviewAssistantText = useMemo(() => {
+    if (!reviewAssistantData || !okr) return '';
+    const d = reviewAssistantData;
+    let text = `📋 ${okr.title} - 季度复盘待关注清单\n`;
+    text += `进度: ${okr.overall_progress.toFixed(1)}%\n\n`;
+
+    if (d.laggingKrs.length > 0) {
+      text += `🔴 落后KR (${d.laggingKrs.length}条)\n`;
+      d.laggingKrs.forEach(kr => {
+        text += `  - ${kr.title}: ${kr.current_value}/${kr.target_value}${kr.unit} (${kr.progress.toFixed(1)}%)\n`;
+      });
+      text += '\n';
+    }
+
+    if (d.recentWeekly.length > 0) {
+      text += `📝 最近周报\n`;
+      d.recentWeekly.forEach(w => {
+        text += `  第${w.week_number}周(信心${w.confidence_index}/10): ${w.progress_description}\n`;
+      });
+      text += '\n';
+    }
+
+    if (d.riskLogs.length > 0) {
+      text += `⚠️ 依赖风险\n`;
+      d.riskLogs.forEach(l => {
+        text += `  - ${l.description}\n`;
+      });
+      text += '\n';
+    }
+
+    if (d.reviewLogs.length > 0) {
+      text += `📊 复盘记录\n`;
+      d.reviewLogs.forEach(l => {
+        const detail = l.detail as Record<string, unknown> | undefined;
+        if (detail) {
+          text += `  评分: ${(detail.overall_score as number)?.toFixed(1)}\n`;
+          if (detail.what_to_improve) text += `  待改进: ${detail.what_to_improve as string}\n`;
+          if (detail.next_actions) text += `  下一步: ${detail.next_actions as string}\n`;
+        }
+      });
+    }
+
+    return text;
+  }, [reviewAssistantData, okr]);
+
+  const handleCopyAssistant = async () => {
+    try {
+      await navigator.clipboard.writeText(reviewAssistantText);
+      setCopied(true);
+      setTimeout(() => setCopied(false), 2000);
+    } catch { /* fallback */ }
+  };
 
   const toggleLogExpand = (logId: string) => {
     setExpandedLogs((prev) => {
@@ -255,7 +319,10 @@ export default function OkrDetail() {
               <button onClick={handleEdit} className="px-3 py-1.5 bg-brand-800 text-white rounded-lg text-sm font-medium hover:bg-brand-900">保存</button>
               <button onClick={() => setEditing(false)} className="px-3 py-1.5 bg-gray-100 text-gray-600 rounded-lg text-sm">取消</button></>
             ) : (
-              <button onClick={startEdit} className="flex items-center gap-1 px-3 py-1.5 text-sm text-brand-600 hover:bg-brand-50 rounded-lg transition-colors"><Edit3 className="w-4 h-4" />编辑</button>
+              <>
+                <button onClick={() => setShowReviewAssistant(!showReviewAssistant)} className="flex items-center gap-1 px-3 py-1.5 text-sm text-purple-600 hover:bg-purple-50 rounded-lg transition-colors"><ClipboardList className="w-4 h-4" />复盘助手</button>
+                <button onClick={startEdit} className="flex items-center gap-1 px-3 py-1.5 text-sm text-brand-600 hover:bg-brand-50 rounded-lg transition-colors"><Edit3 className="w-4 h-4" />编辑</button>
+              </>
             )}
           </div>
         </div>
@@ -314,6 +381,118 @@ export default function OkrDetail() {
         </div>
       </div>
 
+      {showReviewAssistant && reviewAssistantData && (
+        <div className="bg-gradient-to-r from-purple-50 to-brand-50 rounded-xl shadow-sm border border-purple-200 p-6">
+          <div className="flex items-center justify-between mb-4">
+            <h3 className="text-lg font-display font-semibold text-gray-900 flex items-center gap-2">
+              <ClipboardList className="w-5 h-5 text-purple-600" />
+              复盘助手
+              <span className="text-sm font-normal text-gray-400">待关注清单</span>
+            </h3>
+            <div className="flex items-center gap-2">
+              <button
+                onClick={handleCopyAssistant}
+                className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-sm font-medium transition-all ${
+                  copied ? 'bg-green-100 text-green-700' : 'bg-purple-600 text-white hover:bg-purple-700'
+                }`}
+              >
+                {copied ? <CheckCircle2 className="w-4 h-4" /> : <Copy className="w-4 h-4" />}
+                {copied ? '已复制' : '复制清单'}
+              </button>
+              <button onClick={() => setShowReviewAssistant(false)} className="p-1.5 text-gray-400 hover:text-gray-600 hover:bg-white/50 rounded-lg transition-colors">
+                <X className="w-4 h-4" />
+              </button>
+            </div>
+          </div>
+
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+            {reviewAssistantData.laggingKrs.length > 0 && (
+              <div className="bg-white rounded-lg p-4 border border-red-100">
+                <h4 className="text-sm font-semibold text-red-800 mb-3 flex items-center gap-1.5">
+                  <AlertTriangle className="w-4 h-4 text-red-500" />
+                  落后KR ({reviewAssistantData.laggingKrs.length})
+                </h4>
+                <div className="space-y-2">
+                  {reviewAssistantData.laggingKrs.map(kr => (
+                    <div key={kr.id} className="flex items-center gap-2 text-sm">
+                      <span className={`font-bold ${kr.progress < 30 ? 'text-red-600' : 'text-orange-600'}`}>{kr.progress.toFixed(1)}%</span>
+                      <span className="text-gray-700 flex-1 truncate">{kr.title}</span>
+                      <span className="text-xs text-gray-400">{kr.current_value}/{kr.target_value}{kr.unit}</span>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            )}
+
+            {reviewAssistantData.recentWeekly.length > 0 && (
+              <div className="bg-white rounded-lg p-4 border border-brand-100">
+                <h4 className="text-sm font-semibold text-brand-800 mb-3 flex items-center gap-1.5">
+                  <FileText className="w-4 h-4 text-brand-500" />
+                  最近周报
+                </h4>
+                <div className="space-y-2">
+                  {reviewAssistantData.recentWeekly.map(w => (
+                    <div key={w.id} className="text-sm">
+                      <div className="flex items-center gap-2 mb-0.5">
+                        <span className="text-xs text-gray-500">第{w.week_number}周</span>
+                        <span className={`text-[10px] px-1.5 py-0.5 rounded font-bold ${w.confidence_index >= 7 ? 'bg-green-100 text-green-700' : w.confidence_index >= 4 ? 'bg-orange-100 text-orange-700' : 'bg-red-100 text-red-700'}`}>
+                          信心 {w.confidence_index}/10
+                        </span>
+                      </div>
+                      <p className="text-xs text-gray-600 line-clamp-2">{w.progress_description}</p>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            )}
+
+            {reviewAssistantData.riskLogs.length > 0 && (
+              <div className="bg-white rounded-lg p-4 border border-orange-100">
+                <h4 className="text-sm font-semibold text-orange-800 mb-3 flex items-center gap-1.5">
+                  <AlertTriangle className="w-4 h-4 text-orange-500" />
+                  依赖风险
+                </h4>
+                <div className="space-y-1.5">
+                  {reviewAssistantData.riskLogs.map(l => (
+                    <p key={l.id} className="text-xs text-gray-600">{l.description}</p>
+                  ))}
+                </div>
+              </div>
+            )}
+
+            {reviewAssistantData.reviewLogs.length > 0 && (
+              <div className="bg-white rounded-lg p-4 border border-purple-100">
+                <h4 className="text-sm font-semibold text-purple-800 mb-3 flex items-center gap-1.5">
+                  <Clock className="w-4 h-4 text-purple-500" />
+                  复盘评分
+                </h4>
+                <div className="space-y-2">
+                  {reviewAssistantData.reviewLogs.map(l => {
+                    const d = l.detail as Record<string, unknown> | undefined;
+                    return (
+                      <div key={l.id} className="text-xs space-y-1">
+                        <span className="font-bold text-purple-700">{(d?.overall_score as number)?.toFixed(1)}分</span>
+                        {d?.what_to_improve && <p className="text-gray-600">待改进: {d.what_to_improve as string}</p>}
+                        {d?.next_actions && <p className="text-gray-600">下一步: {d.next_actions as string}</p>}
+                      </div>
+                    );
+                  })}
+                </div>
+              </div>
+            )}
+
+            {reviewAssistantData.laggingKrs.length === 0 && reviewAssistantData.riskLogs.length === 0 && (
+              <div className="bg-white rounded-lg p-4 border border-green-100 md:col-span-2">
+                <div className="flex items-center gap-2 text-sm text-green-700">
+                  <CheckCircle2 className="w-5 h-5" />
+                  <span className="font-medium">此OKR当前状态良好，无落后KR和风险依赖</span>
+                </div>
+              </div>
+            )}
+          </div>
+        </div>
+      )}
+
       <div className="bg-white rounded-xl shadow-sm border border-gray-100 p-6">
         <h3 className="text-lg font-display font-semibold text-gray-900 mb-4">变更时间线</h3>
         {activityLogs.length === 0 ? <p className="text-gray-400 text-sm text-center py-6">暂无变更记录</p>
@@ -352,15 +531,23 @@ export default function OkrDetail() {
                         </div>
                       )}
 
-                      {detail && log.type === 'kr_update' && detail.kr_title && (
-                        <div className="p-3 bg-blue-50 rounded-lg">
-                          <p className="text-[10px] text-blue-400 mb-1 uppercase tracking-wide">关联KR</p>
+                      {detail && (log.type === 'kr_update' || log.type === 'kr_sync') && detail.kr_title && (
+                        <div className={`p-3 rounded-lg ${log.type === 'kr_sync' ? 'bg-accent-50' : 'bg-blue-50'}`}>
+                          <p className={`text-[10px] mb-1 uppercase tracking-wide ${log.type === 'kr_sync' ? 'text-accent-400' : 'text-blue-400'}`}>
+                            {log.type === 'kr_sync' ? '自动同步KR' : '关联KR'}
+                          </p>
                           <p className="text-sm font-medium text-gray-700">{detail.kr_title as string}</p>
                           <div className="flex items-center gap-3 mt-2 text-xs text-gray-500">
                             <span>目标: {detail.kr_target as number}{detail.kr_unit as string}</span>
                             <span>当前: {detail.kr_current as number}{detail.kr_unit as string}</span>
                             <span>进度: {Math.round(detail.kr_progress as number)}%</span>
                           </div>
+                          {log.type === 'kr_sync' && detail.kr_method && (
+                            <p className="text-xs text-accent-600 mt-1.5">
+                              同步方式: {detail.kr_method === 'auto' ? '自动数据源' : '手动触发'}
+                              {detail.kr_source_url && <span className="text-gray-400 ml-1">({detail.kr_source_url as string})</span>}
+                            </p>
+                          )}
                         </div>
                       )}
 

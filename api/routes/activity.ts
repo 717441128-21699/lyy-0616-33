@@ -37,6 +37,8 @@ router.get('/:okrId', (req: Request, res: Response): void => {
             kr_target: kr.target_value,
             kr_current: kr.current_value,
             kr_progress: kr.progress,
+            kr_method: kr.update_method,
+            kr_source_url: kr.data_source_url,
           }
         }
       } else if (log.type === 'review' && log.related_id) {
