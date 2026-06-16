@@ -80,6 +80,7 @@ export interface Review {
   reviewer_name?: string;
   okr_title?: string;
   reviewed_at: string;
+  created_at: string;
   kr_scores: KrScore[];
 }
 
@@ -88,6 +89,8 @@ export interface KrScore {
   review_id: string;
   kr_id: string;
   score: number;
+  comment: string | null;
+  created_at: string;
 }
 
 export interface Dependency {
@@ -105,7 +108,7 @@ export interface Notification {
   dependency_id: string;
   user_id: string;
   message: string;
-  risk_level: 'warning' | 'critical';
+  risk_level: 'info' | 'warning' | 'critical';
   is_read: boolean;
   dependency_status?: string;
   dependent_okr_id?: string;
@@ -114,8 +117,8 @@ export interface Notification {
 }
 
 export interface HeatmapData {
-  members: { user_id: string; user_name: string; department_name: string | null }[];
-  okrs: { okr_id: string; owner_id: string; title: string; progress: number; level: string; quarter: string; year: number }[];
+  members: { user_id: string; user_name: string; department_name: string | null; department_id: string | null }[];
+  okrs: { okr_id: string; owner_id: string; title: string; progress: number; level: string; quarter: string; year: number; department_id: string | null; risk_status: string | null }[];
 }
 
 export interface DependencyGraphData {
@@ -130,4 +133,18 @@ export interface PendingUpdate {
   owner_name: string | null;
   week_number: number;
   year: number;
+}
+
+export interface ActivityLog {
+  id: string;
+  okr_id: string;
+  type: 'kr_update' | 'kr_sync' | 'weekly_update' | 'review' | 'dependency_risk' | 'status_change';
+  related_id: string | null;
+  actor_id: string | null;
+  actor_name: string | null;
+  description: string;
+  old_value: string | null;
+  new_value: string | null;
+  created_at: string;
+  detail?: Record<string, unknown>;
 }

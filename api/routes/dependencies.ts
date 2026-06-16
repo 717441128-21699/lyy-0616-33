@@ -27,14 +27,20 @@ router.get('/graph', (req: Request, res: Response): void => {
 
 router.get('/notifications', (req: Request, res: Response): void => {
   try {
-    const { user_id, is_read } = req.query
+    const { user_id, is_read, risk_level, dependent_okr_id, depended_okr_id } = req.query
     let filtered = notifications.map(n => {
       const dep = dependencies.find(d => d.id === n.dependency_id)
+      const dependentOkr = dep ? findOkrById(dep.dependent_okr_id) : null
+      const dependedOkr = dep ? findOkrById(dep.depended_okr_id) : null
+      const user = findUserById(n.user_id)
       return {
         ...n,
         dependency_status: dep?.status ?? null,
         dependent_okr_id: dep?.dependent_okr_id ?? null,
+        dependent_okr_title: dependentOkr?.title ?? null,
         depended_okr_id: dep?.depended_okr_id ?? null,
+        depended_okr_title: dependedOkr?.title ?? null,
+        user_name: user?.name ?? null,
       }
     })
     if (user_id) filtered = filtered.filter(n => n.user_id === user_id)
@@ -42,6 +48,9 @@ router.get('/notifications', (req: Request, res: Response): void => {
       const readVal = is_read === '1' || is_read === 'true'
       filtered = filtered.filter(n => n.is_read === readVal)
     }
+    if (risk_level) filtered = filtered.filter(n => n.risk_level === risk_level)
+    if (dependent_okr_id) filtered = filtered.filter(n => n.dependent_okr_id === dependent_okr_id)
+    if (depended_okr_id) filtered = filtered.filter(n => n.depended_okr_id === depended_okr_id)
     filtered.sort((a, b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime())
     res.json({ success: true, data: filtered })
   } catch (error) {
@@ -61,16 +70,42 @@ router.put('/notifications/:id/read', (req: Request, res: Response): void => {
   }
 })
 
+router.put('/notifications/read-batch', (req: Request, res: Response): void => {
+  try {
+    const { ids } = req.body
+    if (!Array.isArray(ids)) {
+      res.status(400).json({ success: false, error: 'Invalid ids' })
+      return
+    }
+    for (const id of ids) {
+      const notif = notifications.find(n => n.id === id)
+      if (notif) notif.is_read = true
+    }
+    saveData()
+    res.json({ success: true, data: { updated: ids.length } })
+  } catch (error) {
+    res.status(500).json({ success: false, error: 'Failed to mark notifications as read' })
+  }
+})
+
 router.get('/', (req: Request, res: Response): void => {
   try {
     const { status } = req.query
     let filtered = dependencies.map(d => {
       const dependentOkr = findOkrById(d.dependent_okr_id)
       const dependedOkr = findOkrById(d.depended_okr_id)
+      const dependentOwner = dependentOkr ? findUserById(dependentOkr.owner_id) : null
+      const dependedOwner = dependedOkr ? findUserById(dependedOkr.owner_id) : null
       return {
         ...d,
         dependent_okr_title: dependentOkr?.title ?? null,
+        dependent_okr_progress: dependentOkr?.overall_progress ?? null,
+        dependent_okr_level: dependentOkr?.level ?? null,
+        dependent_owner_name: dependentOwner?.name ?? null,
         depended_okr_title: dependedOkr?.title ?? null,
+        depended_okr_progress: dependedOkr?.overall_progress ?? null,
+        depended_okr_level: dependedOkr?.level ?? null,
+        depended_owner_name: dependedOwner?.name ?? null,
       }
     })
     if (status) filtered = filtered.filter(d => d.status === status)

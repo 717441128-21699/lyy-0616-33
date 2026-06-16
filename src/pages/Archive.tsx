@@ -1,7 +1,7 @@
 import { useState, useEffect } from 'react';
-import { Archive as ArchiveIcon, Eye, Inbox } from 'lucide-react';
+import { Archive as ArchiveIcon, Eye, Inbox, Download, FileText } from 'lucide-react';
 import type { OKR, OKRWithDetails, Review as ReviewType } from '@/types';
-import { fetchArchivedOkrs, fetchOkrById, fetchReviewsByOkr } from '@/api';
+import { fetchArchivedOkrs, fetchOkrById, fetchReviewsByOkr, fetchQuarterlyReport } from '@/api';
 import ProgressBar from '@/components/ProgressBar';
 import ProgressRing from '@/components/ProgressRing';
 import Modal from '@/components/Modal';
@@ -19,12 +19,13 @@ function levelLabel(level: string): string {
 }
 
 export default function Archive() {
-  const [quarter, setQuarter] = useState('Q1');
-  const [year, setYear] = useState(2025);
+  const [quarter, setQuarter] = useState('Q2');
+  const [year, setYear] = useState(2026);
   const [okrs, setOkrs] = useState<OKR[]>([]);
   const [selectedDetail, setSelectedDetail] = useState<OKRWithDetails | null>(null);
   const [selectedReview, setSelectedReview] = useState<ReviewType | null>(null);
   const [modalOpen, setModalOpen] = useState(false);
+  const [exporting, setExporting] = useState(false);
 
   useEffect(() => {
     fetchArchivedOkrs({ quarter, year: String(year) }).then(setOkrs);
@@ -39,6 +40,91 @@ export default function Archive() {
     } catch { /* empty */ }
   };
 
+  const handleExport = async () => {
+    setExporting(true);
+    try {
+      const report = await fetchQuarterlyReport(quarter, year);
+      const reportText = generateReportText(report);
+      const blob = new Blob([reportText], { type: 'text/plain;charset=utf-8' });
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = `${year}年${quarter}季度复盘报告.txt`;
+      document.body.appendChild(a);
+      a.click();
+      document.body.removeChild(a);
+      URL.revokeObjectURL(url);
+    } finally {
+      setExporting(false);
+    }
+  };
+
+  const generateReportText = (report: any): string => {
+    let text = '';
+    text += '═══════════════════════════════════════════════\n';
+    text += `     ${report.year}年 ${report.quarter} 季度 OKR 复盘报告\n`;
+    text += '═══════════════════════════════════════════════\n\n';
+    text += `生成时间: ${new Date(report.generated_at).toLocaleString('zh-CN')}\n\n`;
+
+    text += '───────────────────────────────────────────────\n';
+    text += '  一、整体概览\n';
+    text += '───────────────────────────────────────────────\n\n';
+    text += `  OKR总数:        ${report.summary.total_okrs} 个\n`;
+    text += `  已完成OKR:      ${report.summary.completed_okrs} 个\n`;
+    text += `  OKR平均进度:    ${report.summary.avg_okr_progress.toFixed(1)}%\n`;
+    text += `  KR总数:         ${report.summary.total_krs} 个\n`;
+    text += `  已完成KR:       ${report.summary.completed_krs} 个\n`;
+    text += `  风险依赖数:     ${report.summary.at_risk_dependencies} 个\n\n`;
+
+    text += '───────────────────────────────────────────────\n';
+    text += '  二、OKR详细情况\n';
+    text += '───────────────────────────────────────────────\n\n';
+
+    report.okrs.forEach((okr: any, idx: number) => {
+      text += `  ${idx + 1}. ${okr.title}\n`;
+      text += `     负责人: ${okr.owner_name || '未指定'} | 级别: ${okr.level === 'company' ? '公司级' : okr.level === 'department' ? '部门级' : '个人级'}\n`;
+      text += `     整体进度: ${okr.overall_progress.toFixed(1)}%  |  KR完成: ${okr.kr_completed_count}/${okr.kr_total_count}\n\n`;
+
+      if (okr.key_results.length > 0) {
+        text += `     关键结果:\n`;
+        okr.key_results.forEach((kr: any) => {
+          const status = kr.completed ? '✓ 完成' : '○ 进行中';
+          text += `       ${status}  ${kr.title}\n`;
+          text += `           当前: ${kr.current_value}/${kr.target_value}${kr.unit}  (${kr.progress.toFixed(1)}%)\n`;
+        });
+        text += '\n';
+      }
+
+      if (okr.reviews.length > 0) {
+        text += `     复盘评分:\n`;
+        okr.reviews.forEach((review: any) => {
+          text += `       综合评分: ${review.overall_score.toFixed(1)}  |  复盘人: ${review.reviewer_name || '未指定'}\n`;
+          if (review.what_went_well) text += `       做得好的: ${review.what_went_well}\n`;
+          if (review.what_to_improve) text += `       需改进的: ${review.what_to_improve}\n`;
+          if (review.next_actions) text += `       下一步: ${review.next_actions}\n`;
+        });
+        text += '\n';
+      }
+
+      if (okr.dependencies.length > 0) {
+        text += `     依赖关系:\n`;
+        okr.dependencies.forEach((dep: any) => {
+          const statusText = dep.status === 'healthy' ? '健康' : dep.status === 'at_risk' ? '有风险' : '高危';
+          text += `       [${statusText}] ${dep.type}: ${dep.other_okr_title || '未知'}\n`;
+        });
+        text += '\n';
+      }
+
+      text += '  ─────────────────────────────────────────────\n\n';
+    });
+
+    text += '═══════════════════════════════════════════════\n';
+    text += '                   报告结束\n';
+    text += '═══════════════════════════════════════════════\n';
+
+    return text;
+  };
+
   return (
     <div className="space-y-6">
       <div className="flex items-center justify-between">
@@ -50,6 +136,14 @@ export default function Archive() {
           <select value={year} onChange={(e) => setYear(Number(e.target.value))} className="border border-gray-300 rounded-lg px-3 py-2 text-sm focus:ring-2 focus:ring-brand-500 focus:border-brand-500 outline-none">
             {[2024, 2025, 2026].map((y) => <option key={y} value={y}>{y}</option>)}
           </select>
+          <button
+            onClick={handleExport}
+            disabled={exporting || okrs.length === 0}
+            className="flex items-center gap-2 px-4 py-2 bg-brand-600 text-white rounded-lg text-sm font-medium hover:bg-brand-700 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+          >
+            <Download className="w-4 h-4" />
+            {exporting ? '生成中...' : '导出报告'}
+          </button>
         </div>
       </div>
 

@@ -1,6 +1,6 @@
 import { Router, type Request, type Response } from 'express'
 import { v4 as uuidv4 } from 'uuid'
-import { okrs, keyResults, recalcOkrProgress, findOkrById, findUserById, updateDependencyRisks, saveData } from '../db/store.js'
+import { okrs, keyResults, recalcOkrProgress, findOkrById, findUserById, updateDependencyRisks, saveData, addActivityLog } from '../db/store.js'
 
 const router = Router()
 
@@ -220,12 +220,22 @@ router.put('/:id/key-results/:krId/progress', (req: Request, res: Response): voi
   try {
     const kr = keyResults.find(k => k.id === req.params.krId && k.okr_id === req.params.id)
     if (!kr) { res.status(404).json({ success: false, error: 'Key result not found' }); return }
-    const { current_value } = req.body
+    const { current_value, updated_by } = req.body
+    const oldValue = `${Math.round(kr.current_value * 100) / 100}${kr.unit}`
     kr.current_value = current_value
     kr.progress = kr.target_value > 0 ? Math.min((current_value / kr.target_value) * 100, 100) : 0
     kr.updated_at = new Date().toISOString()
     recalcOkrProgress(req.params.id)
     updateDependencyRisks(req.params.id)
+    addActivityLog(
+      req.params.id,
+      'kr_update',
+      kr.id,
+      updated_by || null,
+      `更新了KR「${kr.title}」当前值`,
+      oldValue,
+      `${Math.round(current_value * 100) / 100}${kr.unit}`,
+    )
     saveData()
     res.json({ success: true, data: kr })
   } catch (error) {
@@ -237,6 +247,7 @@ router.put('/:id/key-results/:krId/sync', (req: Request, res: Response): void =>
   try {
     const kr = keyResults.find(k => k.id === req.params.krId && k.okr_id === req.params.id)
     if (!kr) { res.status(404).json({ success: false, error: 'Key result not found' }); return }
+    const oldValue = `${Math.round(kr.current_value * 100) / 100}${kr.unit}`
     const currentProgress = kr.progress
     const minProgress = currentProgress
     const maxProgress = Math.min(100, currentProgress + (100 - currentProgress) * 0.3)
@@ -247,6 +258,15 @@ router.put('/:id/key-results/:krId/sync', (req: Request, res: Response): void =>
     kr.updated_at = new Date().toISOString()
     recalcOkrProgress(req.params.id)
     updateDependencyRisks(req.params.id)
+    addActivityLog(
+      req.params.id,
+      'kr_sync',
+      kr.id,
+      null,
+      `自动同步了KR「${kr.title}」数据`,
+      oldValue,
+      `${Math.round(newValue * 100) / 100}${kr.unit}`,
+    )
     saveData()
     res.json({ success: true, data: kr })
   } catch (error) {

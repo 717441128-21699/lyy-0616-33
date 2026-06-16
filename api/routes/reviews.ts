@@ -1,6 +1,7 @@
 import { Router, type Request, type Response } from 'express'
 import { v4 as uuidv4 } from 'uuid'
-import { reviews, krScores, findUserById, findOkrById, saveData } from '../db/store.js'
+import { reviews, krScores, findUserById, findOkrById, saveData, addActivityLog } from '../db/store.js'
+import type { KrScore } from '../db/store.js'
 
 const router = Router()
 
@@ -41,11 +42,11 @@ router.post('/', (req: Request, res: Response): void => {
     const now = new Date().toISOString()
     let overallScore = 0
     const reviewId = uuidv4()
-    const createdKrScores: { id: string; review_id: string; kr_id: string; score: number }[] = []
+    const createdKrScores: KrScore[] = []
     if (Array.isArray(krScoresInput) && krScoresInput.length > 0) {
-      overallScore = krScoresInput.reduce((sum: number, ks: { score: number }) => sum + ks.score, 0) / krScoresInput.length
+      overallScore = krScoresInput.reduce((sum: number, ks: { score: number; comment?: string | null }) => sum + ks.score, 0) / krScoresInput.length
       for (const ks of krScoresInput) {
-        const krScore = { id: uuidv4(), review_id: reviewId, kr_id: ks.kr_id, score: ks.score }
+        const krScore = { id: uuidv4(), review_id: reviewId, kr_id: ks.kr_id, score: ks.score, comment: ks.comment ?? null, created_at: now }
         krScores.push(krScore)
         createdKrScores.push(krScore)
       }
@@ -61,8 +62,18 @@ router.post('/', (req: Request, res: Response): void => {
       next_actions: next_actions || '',
       reviewed_by,
       reviewed_at: now,
+      created_at: now,
     }
     reviews.push(review)
+    addActivityLog(
+      okr_id,
+      'review',
+      reviewId,
+      reviewed_by || null,
+      `完成了${year}年${quarter}季度复盘，综合评分${Math.round(overallScore * 100) / 100}`,
+      null,
+      `${Math.round(overallScore * 100) / 100}分`,
+    )
     saveData()
     res.status(201).json({ success: true, data: { ...review, kr_scores: createdKrScores } })
   } catch (error) {

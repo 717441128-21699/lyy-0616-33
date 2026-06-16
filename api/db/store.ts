@@ -79,6 +79,7 @@ export interface Review {
   next_actions: string
   reviewed_by: string
   reviewed_at: string
+  created_at: string
 }
 
 export interface KrScore {
@@ -86,6 +87,8 @@ export interface KrScore {
   review_id: string
   kr_id: string
   score: number
+  comment: string | null
+  created_at: string
 }
 
 export interface Dependency {
@@ -101,8 +104,21 @@ export interface Notification {
   dependency_id: string
   user_id: string
   message: string
-  risk_level: 'warning' | 'critical'
+  risk_level: 'info' | 'warning' | 'critical'
   is_read: boolean
+  created_at: string
+}
+
+export interface ActivityLog {
+  id: string
+  okr_id: string
+  type: 'kr_update' | 'kr_sync' | 'weekly_update' | 'review' | 'dependency_risk' | 'status_change'
+  related_id: string | null
+  actor_id: string | null
+  actor_name: string | null
+  description: string
+  old_value: string | null
+  new_value: string | null
   created_at: string
 }
 
@@ -116,6 +132,7 @@ interface DataStore {
   krScores: KrScore[]
   dependencies: Dependency[]
   notifications: Notification[]
+  activityLogs: ActivityLog[]
 }
 
 const seedDepartments: Department[] = [
@@ -137,68 +154,161 @@ const seedOkrs: OKR[] = [
     id: 'okr-1', title: '提升公司整体运营效率', description: '2026年Q2公司级OKR',
     level: 'company', owner_id: 'user-1', department_id: null, parent_okr_id: null,
     quarter: 'Q2', year: 2026, status: 'active', overall_progress: 45,
-    created_at: '2026-04-01T00:00:00.000Z', updated_at: '2026-04-01T00:00:00.000Z',
+    created_at: '2026-04-01T00:00:00.000Z', updated_at: '2026-06-10T00:00:00.000Z',
   },
   {
     id: 'okr-2', title: '技术部提升研发效能', description: '技术部Q2核心OKR',
     level: 'department', owner_id: 'user-2', department_id: 'dept-1', parent_okr_id: 'okr-1',
     quarter: 'Q2', year: 2026, status: 'active', overall_progress: 52,
-    created_at: '2026-04-01T00:00:00.000Z', updated_at: '2026-04-01T00:00:00.000Z',
+    created_at: '2026-04-01T00:00:00.000Z', updated_at: '2026-06-08T00:00:00.000Z',
   },
   {
     id: 'okr-3', title: '产品部提升用户体验', description: '产品部Q2核心OKR',
     level: 'department', owner_id: 'user-3', department_id: 'dept-2', parent_okr_id: 'okr-1',
     quarter: 'Q2', year: 2026, status: 'active', overall_progress: 38,
-    created_at: '2026-04-01T00:00:00.000Z', updated_at: '2026-04-01T00:00:00.000Z',
+    created_at: '2026-04-01T00:00:00.000Z', updated_at: '2026-06-05T00:00:00.000Z',
   },
   {
     id: 'okr-4', title: '提升前端开发效率', description: '刘洋Q2个人OKR',
     level: 'individual', owner_id: 'user-4', department_id: 'dept-1', parent_okr_id: 'okr-2',
     quarter: 'Q2', year: 2026, status: 'active', overall_progress: 55,
-    created_at: '2026-04-01T00:00:00.000Z', updated_at: '2026-04-01T00:00:00.000Z',
+    created_at: '2026-04-01T00:00:00.000Z', updated_at: '2026-06-09T00:00:00.000Z',
   },
   {
     id: 'okr-5', title: '优化用户调研流程', description: '陈静Q2个人OKR',
     level: 'individual', owner_id: 'user-5', department_id: 'dept-2', parent_okr_id: 'okr-3',
     quarter: 'Q2', year: 2026, status: 'active', overall_progress: 30,
-    created_at: '2026-04-01T00:00:00.000Z', updated_at: '2026-04-01T00:00:00.000Z',
+    created_at: '2026-04-01T00:00:00.000Z', updated_at: '2026-06-03T00:00:00.000Z',
+  },
+  {
+    id: 'okr-6', title: '年度营收增长目标', description: '2026年Q1公司级OKR',
+    level: 'company', owner_id: 'user-1', department_id: null, parent_okr_id: null,
+    quarter: 'Q1', year: 2026, status: 'archived', overall_progress: 85,
+    created_at: '2026-01-01T00:00:00.000Z', updated_at: '2026-03-31T00:00:00.000Z',
+  },
+  {
+    id: 'okr-7', title: '技术部系统架构升级', description: '技术部Q1核心OKR',
+    level: 'department', owner_id: 'user-2', department_id: 'dept-1', parent_okr_id: 'okr-6',
+    quarter: 'Q1', year: 2026, status: 'archived', overall_progress: 92,
+    created_at: '2026-01-02T00:00:00.000Z', updated_at: '2026-03-30T00:00:00.000Z',
+  },
+  {
+    id: 'okr-8', title: '产品部用户增长', description: '产品部Q1核心OKR',
+    level: 'department', owner_id: 'user-3', department_id: 'dept-2', parent_okr_id: 'okr-6',
+    quarter: 'Q1', year: 2026, status: 'archived', overall_progress: 78,
+    created_at: '2026-01-02T00:00:00.000Z', updated_at: '2026-03-30T00:00:00.000Z',
+  },
+  {
+    id: 'okr-9', title: '完成后台系统重构', description: '刘洋Q1个人OKR',
+    level: 'individual', owner_id: 'user-4', department_id: 'dept-1', parent_okr_id: 'okr-7',
+    quarter: 'Q1', year: 2026, status: 'archived', overall_progress: 95,
+    created_at: '2026-01-03T00:00:00.000Z', updated_at: '2026-03-29T00:00:00.000Z',
+  },
+  {
+    id: 'okr-10', title: '建立用户画像体系', description: '陈静Q1个人OKR',
+    level: 'individual', owner_id: 'user-5', department_id: 'dept-2', parent_okr_id: 'okr-8',
+    quarter: 'Q1', year: 2026, status: 'archived', overall_progress: 70,
+    created_at: '2026-01-03T00:00:00.000Z', updated_at: '2026-03-29T00:00:00.000Z',
   },
 ]
 
 const seedKeyResults: KeyResult[] = [
-  { id: 'kr-1', okr_id: 'okr-1', title: '运营成本降低', target_value: 20, current_value: 8, unit: '%', update_method: 'manual', data_source_url: null, progress: 40, created_at: '2026-04-01T00:00:00.000Z', updated_at: '2026-04-01T00:00:00.000Z' },
-  { id: 'kr-2', okr_id: 'okr-1', title: '客户满意度提升', target_value: 95, current_value: 78, unit: '分', update_method: 'manual', data_source_url: null, progress: 82, created_at: '2026-04-01T00:00:00.000Z', updated_at: '2026-04-01T00:00:00.000Z' },
-  { id: 'kr-3', okr_id: 'okr-1', title: '内部流程自动化率', target_value: 80, current_value: 45, unit: '%', update_method: 'manual', data_source_url: null, progress: 56, created_at: '2026-04-01T00:00:00.000Z', updated_at: '2026-04-01T00:00:00.000Z' },
-  { id: 'kr-4', okr_id: 'okr-2', title: '代码部署频率', target_value: 50, current_value: 32, unit: '次/月', update_method: 'manual', data_source_url: null, progress: 64, created_at: '2026-04-01T00:00:00.000Z', updated_at: '2026-04-01T00:00:00.000Z' },
-  { id: 'kr-5', okr_id: 'okr-2', title: '线上故障率降低', target_value: 0.5, current_value: 1.2, unit: '次/周', update_method: 'manual', data_source_url: null, progress: 42, created_at: '2026-04-01T00:00:00.000Z', updated_at: '2026-04-01T00:00:00.000Z' },
-  { id: 'kr-6', okr_id: 'okr-2', title: '自动化测试覆盖率', target_value: 85, current_value: 62, unit: '%', update_method: 'manual', data_source_url: null, progress: 73, created_at: '2026-04-01T00:00:00.000Z', updated_at: '2026-04-01T00:00:00.000Z' },
-  { id: 'kr-7', okr_id: 'okr-3', title: 'NPS评分提升', target_value: 70, current_value: 45, unit: '分', update_method: 'manual', data_source_url: null, progress: 64, created_at: '2026-04-01T00:00:00.000Z', updated_at: '2026-04-01T00:00:00.000Z' },
-  { id: 'kr-8', okr_id: 'okr-3', title: '用户留存率', target_value: 90, current_value: 75, unit: '%', update_method: 'manual', data_source_url: null, progress: 83, created_at: '2026-04-01T00:00:00.000Z', updated_at: '2026-04-01T00:00:00.000Z' },
-  { id: 'kr-9', okr_id: 'okr-4', title: '组件库完善度', target_value: 100, current_value: 68, unit: '%', update_method: 'manual', data_source_url: null, progress: 68, created_at: '2026-04-01T00:00:00.000Z', updated_at: '2026-04-01T00:00:00.000Z' },
-  { id: 'kr-10', okr_id: 'okr-4', title: '页面加载速度优化', target_value: 2, current_value: 3.2, unit: '秒', update_method: 'manual', data_source_url: null, progress: 63, created_at: '2026-04-01T00:00:00.000Z', updated_at: '2026-04-01T00:00:00.000Z' },
-  { id: 'kr-11', okr_id: 'okr-5', title: '月度调研次数', target_value: 8, current_value: 3, unit: '次', update_method: 'manual', data_source_url: null, progress: 38, created_at: '2026-04-01T00:00:00.000Z', updated_at: '2026-04-01T00:00:00.000Z' },
-  { id: 'kr-12', okr_id: 'okr-5', title: '调研报告产出', target_value: 4, current_value: 1, unit: '份', update_method: 'manual', data_source_url: null, progress: 25, created_at: '2026-04-01T00:00:00.000Z', updated_at: '2026-04-01T00:00:00.000Z' },
-  { id: 'kr-13', okr_id: 'okr-5', title: '用户反馈响应时间', target_value: 24, current_value: 48, unit: '小时', update_method: 'manual', data_source_url: null, progress: 50, created_at: '2026-04-01T00:00:00.000Z', updated_at: '2026-04-01T00:00:00.000Z' },
+  { id: 'kr-1', okr_id: 'okr-1', title: '运营成本降低', target_value: 20, current_value: 8, unit: '%', update_method: 'manual', data_source_url: null, progress: 40, created_at: '2026-04-01T00:00:00.000Z', updated_at: '2026-06-05T00:00:00.000Z' },
+  { id: 'kr-2', okr_id: 'okr-1', title: '客户满意度提升', target_value: 95, current_value: 78, unit: '分', update_method: 'manual', data_source_url: null, progress: 82, created_at: '2026-04-01T00:00:00.000Z', updated_at: '2026-06-08T00:00:00.000Z' },
+  { id: 'kr-3', okr_id: 'okr-1', title: '内部流程自动化率', target_value: 80, current_value: 45, unit: '%', update_method: 'manual', data_source_url: null, progress: 56, created_at: '2026-04-01T00:00:00.000Z', updated_at: '2026-06-07T00:00:00.000Z' },
+  { id: 'kr-4', okr_id: 'okr-2', title: '代码部署频率', target_value: 50, current_value: 32, unit: '次/月', update_method: 'manual', data_source_url: null, progress: 64, created_at: '2026-04-01T00:00:00.000Z', updated_at: '2026-06-06T00:00:00.000Z' },
+  { id: 'kr-5', okr_id: 'okr-2', title: '线上故障率降低', target_value: 0.5, current_value: 1.2, unit: '次/周', update_method: 'manual', data_source_url: null, progress: 42, created_at: '2026-04-01T00:00:00.000Z', updated_at: '2026-06-04T00:00:00.000Z' },
+  { id: 'kr-6', okr_id: 'okr-2', title: '自动化测试覆盖率', target_value: 85, current_value: 62, unit: '%', update_method: 'manual', data_source_url: null, progress: 73, created_at: '2026-04-01T00:00:00.000Z', updated_at: '2026-06-07T00:00:00.000Z' },
+  { id: 'kr-7', okr_id: 'okr-3', title: 'NPS评分提升', target_value: 70, current_value: 45, unit: '分', update_method: 'manual', data_source_url: null, progress: 64, created_at: '2026-04-01T00:00:00.000Z', updated_at: '2026-05-25T00:00:00.000Z' },
+  { id: 'kr-8', okr_id: 'okr-3', title: '用户留存率', target_value: 90, current_value: 75, unit: '%', update_method: 'manual', data_source_url: null, progress: 83, created_at: '2026-04-01T00:00:00.000Z', updated_at: '2026-06-02T00:00:00.000Z' },
+  { id: 'kr-9', okr_id: 'okr-4', title: '组件库完善度', target_value: 100, current_value: 68, unit: '%', update_method: 'manual', data_source_url: null, progress: 68, created_at: '2026-04-01T00:00:00.000Z', updated_at: '2026-06-09T00:00:00.000Z' },
+  { id: 'kr-10', okr_id: 'okr-4', title: '页面加载速度优化', target_value: 2, current_value: 3.2, unit: '秒', update_method: 'manual', data_source_url: null, progress: 63, created_at: '2026-04-01T00:00:00.000Z', updated_at: '2026-06-05T00:00:00.000Z' },
+  { id: 'kr-11', okr_id: 'okr-5', title: '月度调研次数', target_value: 8, current_value: 3, unit: '次', update_method: 'manual', data_source_url: null, progress: 38, created_at: '2026-04-01T00:00:00.000Z', updated_at: '2026-06-03T00:00:00.000Z' },
+  { id: 'kr-12', okr_id: 'okr-5', title: '调研报告产出', target_value: 4, current_value: 1, unit: '份', update_method: 'manual', data_source_url: null, progress: 25, created_at: '2026-04-01T00:00:00.000Z', updated_at: '2026-05-28T00:00:00.000Z' },
+  { id: 'kr-13', okr_id: 'okr-5', title: '用户反馈响应时间', target_value: 24, current_value: 48, unit: '小时', update_method: 'manual', data_source_url: null, progress: 50, created_at: '2026-04-01T00:00:00.000Z', updated_at: '2026-06-01T00:00:00.000Z' },
+  { id: 'kr-14', okr_id: 'okr-6', title: '季度营收增长', target_value: 5000, current_value: 4250, unit: '万元', update_method: 'manual', data_source_url: null, progress: 85, created_at: '2026-01-01T00:00:00.000Z', updated_at: '2026-03-31T00:00:00.000Z' },
+  { id: 'kr-15', okr_id: 'okr-6', title: '新客户数量', target_value: 200, current_value: 168, unit: '个', update_method: 'manual', data_source_url: null, progress: 84, created_at: '2026-01-01T00:00:00.000Z', updated_at: '2026-03-30T00:00:00.000Z' },
+  { id: 'kr-16', okr_id: 'okr-6', title: '客户留存率', target_value: 95, current_value: 91, unit: '%', update_method: 'manual', data_source_url: null, progress: 96, created_at: '2026-01-01T00:00:00.000Z', updated_at: '2026-03-31T00:00:00.000Z' },
+  { id: 'kr-17', okr_id: 'okr-7', title: '系统可用性', target_value: 99.9, current_value: 99.85, unit: '%', update_method: 'manual', data_source_url: null, progress: 95, created_at: '2026-01-02T00:00:00.000Z', updated_at: '2026-03-29T00:00:00.000Z' },
+  { id: 'kr-18', okr_id: 'okr-7', title: '需求交付周期', target_value: 14, current_value: 10, unit: '天', update_method: 'manual', data_source_url: null, progress: 100, created_at: '2026-01-02T00:00:00.000Z', updated_at: '2026-03-28T00:00:00.000Z' },
+  { id: 'kr-19', okr_id: 'okr-7', title: '技术债务减少', target_value: 30, current_value: 28, unit: '%', update_method: 'manual', data_source_url: null, progress: 93, created_at: '2026-01-02T00:00:00.000Z', updated_at: '2026-03-29T00:00:00.000Z' },
+  { id: 'kr-20', okr_id: 'okr-8', title: '月活跃用户增长', target_value: 10000, current_value: 7200, unit: '人', update_method: 'manual', data_source_url: null, progress: 72, created_at: '2026-01-02T00:00:00.000Z', updated_at: '2026-03-30T00:00:00.000Z' },
+  { id: 'kr-21', okr_id: 'okr-8', title: '产品功能满意度', target_value: 90, current_value: 76, unit: '分', update_method: 'manual', data_source_url: null, progress: 84, created_at: '2026-01-02T00:00:00.000Z', updated_at: '2026-03-29T00:00:00.000Z' },
+  { id: 'kr-22', okr_id: 'okr-9', title: '后台接口重构完成', target_value: 100, current_value: 98, unit: '%', update_method: 'manual', data_source_url: null, progress: 98, created_at: '2026-01-03T00:00:00.000Z', updated_at: '2026-03-28T00:00:00.000Z' },
+  { id: 'kr-23', okr_id: 'okr-9', title: '接口响应时间优化', target_value: 100, current_value: 92, unit: 'ms', update_method: 'manual', data_source_url: null, progress: 92, created_at: '2026-01-03T00:00:00.000Z', updated_at: '2026-03-27T00:00:00.000Z' },
+  { id: 'kr-24', okr_id: 'okr-10', title: '用户标签体系建立', target_value: 50, current_value: 35, unit: '个', update_method: 'manual', data_source_url: null, progress: 70, created_at: '2026-01-03T00:00:00.000Z', updated_at: '2026-03-28T00:00:00.000Z' },
+  { id: 'kr-25', okr_id: 'okr-10', title: '用户分群模型', target_value: 5, current_value: 3, unit: '个', update_method: 'manual', data_source_url: null, progress: 60, created_at: '2026-01-03T00:00:00.000Z', updated_at: '2026-03-29T00:00:00.000Z' },
 ]
 
 const seedWeeklyUpdates: WeeklyUpdate[] = [
-  { id: 'wu-1', okr_id: 'okr-4', kr_id: 'kr-9', week_number: 23, year: 2026, progress_description: '完成5个新组件开发', confidence_index: 8, kr_current_value: 60, updated_by: 'user-4', created_at: '2026-06-07T00:00:00.000Z' },
-  { id: 'wu-2', okr_id: 'okr-5', kr_id: 'kr-11', week_number: 23, year: 2026, progress_description: '完成2次用户调研', confidence_index: 6, kr_current_value: 2, updated_by: 'user-5', created_at: '2026-06-07T00:00:00.000Z' },
-  { id: 'wu-3', okr_id: 'okr-2', kr_id: 'kr-6', week_number: 23, year: 2026, progress_description: '新增自动化测试用例42个', confidence_index: 7, kr_current_value: 58, updated_by: 'user-2', created_at: '2026-06-07T00:00:00.000Z' },
+  { id: 'wu-1', okr_id: 'okr-4', kr_id: 'kr-9', week_number: 23, year: 2026, progress_description: '完成5个新组件开发', confidence_index: 8, kr_current_value: 60, updated_by: 'user-4', created_at: '2026-06-07T09:30:00.000Z' },
+  { id: 'wu-2', okr_id: 'okr-5', kr_id: 'kr-11', week_number: 23, year: 2026, progress_description: '完成2次用户调研', confidence_index: 6, kr_current_value: 2, updated_by: 'user-5', created_at: '2026-06-07T14:20:00.000Z' },
+  { id: 'wu-3', okr_id: 'okr-2', kr_id: 'kr-6', week_number: 23, year: 2026, progress_description: '新增自动化测试用例42个', confidence_index: 7, kr_current_value: 58, updated_by: 'user-2', created_at: '2026-06-07T10:15:00.000Z' },
+  { id: 'wu-4', okr_id: 'okr-2', kr_id: 'kr-4', week_number: 22, year: 2026, progress_description: '优化CI/CD流水线，部署速度提升30%', confidence_index: 9, kr_current_value: 28, updated_by: 'user-2', created_at: '2026-05-31T11:00:00.000Z' },
+  { id: 'wu-5', okr_id: 'okr-3', kr_id: 'kr-7', week_number: 22, year: 2026, progress_description: '完成Q2用户满意度调研初稿', confidence_index: 5, kr_current_value: 42, updated_by: 'user-3', created_at: '2026-05-30T16:45:00.000Z' },
+  { id: 'wu-6', okr_id: 'okr-4', kr_id: 'kr-10', week_number: 22, year: 2026, progress_description: '图片懒加载优化，首屏速度提升0.5秒', confidence_index: 8, kr_current_value: 65, updated_by: 'user-4', created_at: '2026-05-31T15:30:00.000Z' },
+  { id: 'wu-7', okr_id: 'okr-9', kr_id: 'kr-22', week_number: 13, year: 2026, progress_description: '完成用户模块接口重构', confidence_index: 9, kr_current_value: 60, updated_by: 'user-4', created_at: '2026-03-28T10:00:00.000Z' },
+  { id: 'wu-8', okr_id: 'okr-10', kr_id: 'kr-24', week_number: 13, year: 2026, progress_description: '完成基础标签体系设计', confidence_index: 7, kr_current_value: 20, updated_by: 'user-5', created_at: '2026-03-28T14:30:00.000Z' },
+  { id: 'wu-9', okr_id: 'okr-7', kr_id: 'kr-18', week_number: 10, year: 2026, progress_description: '引入敏捷开发流程，需求交付周期缩短2天', confidence_index: 9, kr_current_value: 12, updated_by: 'user-2', created_at: '2026-03-07T09:00:00.000Z' },
 ]
 
-const seedReviews: Review[] = []
+const seedReviews: Review[] = [
+  { id: 'review-1', okr_id: 'okr-6', quarter: 'Q1', year: 2026, overall_score: 0.82, what_went_well: '营收增长超预期，客户留存率表现优秀，团队执行力强', what_to_improve: '新客户获取速度低于预期，市场推广需加强', next_actions: 'Q2加大市场投放力度，拓展新的获客渠道', reviewed_by: 'user-1', reviewed_at: '2026-04-02T10:00:00.000Z', created_at: '2026-04-02T10:00:00.000Z' },
+  { id: 'review-2', okr_id: 'okr-7', quarter: 'Q1', year: 2026, overall_score: 0.9, what_went_well: '系统架构升级顺利完成，需求交付周期大幅缩短，技术债务显著减少', what_to_improve: '系统可用性还有提升空间，线上故障响应需要更快', next_actions: 'Q2建立完善的监控告警体系，提升运维响应速度', reviewed_by: 'user-1', reviewed_at: '2026-04-03T14:00:00.000Z', created_at: '2026-04-03T14:00:00.000Z' },
+  { id: 'review-3', okr_id: 'okr-8', quarter: 'Q1', year: 2026, overall_score: 0.75, what_went_well: '产品功能满意度稳步提升，用户反馈收集机制建立', what_to_improve: '用户增长速度未达预期，活跃用户增长乏力', next_actions: 'Q2重点发力用户增长，优化产品 onboarding 流程', reviewed_by: 'user-1', reviewed_at: '2026-04-03T16:30:00.000Z', created_at: '2026-04-03T16:30:00.000Z' },
+  { id: 'review-4', okr_id: 'okr-9', quarter: 'Q1', year: 2026, overall_score: 0.92, what_went_well: '后台系统重构质量高，接口性能提升明显，代码可维护性大幅改善', what_to_improve: '文档更新不及时，新成员上手成本高', next_actions: 'Q2完善技术文档，建立定期更新机制', reviewed_by: 'user-2', reviewed_at: '2026-04-02T11:00:00.000Z', created_at: '2026-04-02T11:00:00.000Z' },
+  { id: 'review-5', okr_id: 'okr-10', quarter: 'Q1', year: 2026, overall_score: 0.68, what_went_well: '用户标签体系基础搭建完成，分群模型有初步成果', what_to_improve: '标签数量和分群模型数量都未达标，进度偏慢', next_actions: 'Q2加快标签体系建设，增加更多用户分群维度', reviewed_by: 'user-3', reviewed_at: '2026-04-02T15:00:00.000Z', created_at: '2026-04-02T15:00:00.000Z' },
+]
 
-const seedKrScores: KrScore[] = []
+const seedKrScores: KrScore[] = [
+  { id: 'ks-1', review_id: 'review-1', kr_id: 'kr-14', score: 0.85, comment: '营收增长接近目标，表现不错', created_at: '2026-04-02T10:00:00.000Z' },
+  { id: 'ks-2', review_id: 'review-1', kr_id: 'kr-15', score: 0.75, comment: '新客户数量偏低，需要加强', created_at: '2026-04-02T10:00:00.000Z' },
+  { id: 'ks-3', review_id: 'review-1', kr_id: 'kr-16', score: 0.92, comment: '客户留存率超预期', created_at: '2026-04-02T10:00:00.000Z' },
+  { id: 'ks-4', review_id: 'review-2', kr_id: 'kr-17', score: 0.88, comment: '系统可用性接近目标', created_at: '2026-04-03T14:00:00.000Z' },
+  { id: 'ks-5', review_id: 'review-2', kr_id: 'kr-18', score: 0.95, comment: '交付周期大幅缩短，超预期', created_at: '2026-04-03T14:00:00.000Z' },
+  { id: 'ks-6', review_id: 'review-2', kr_id: 'kr-19', score: 0.87, comment: '技术债务减少明显', created_at: '2026-04-03T14:00:00.000Z' },
+  { id: 'ks-7', review_id: 'review-4', kr_id: 'kr-22', score: 0.95, comment: '重构质量很高', created_at: '2026-04-02T11:00:00.000Z' },
+  { id: 'ks-8', review_id: 'review-4', kr_id: 'kr-23', score: 0.9, comment: '性能优化效果好', created_at: '2026-04-02T11:00:00.000Z' },
+]
 
 const seedDependencies: Dependency[] = [
   { id: 'dep-1', dependent_okr_id: 'okr-4', depended_okr_id: 'okr-3', status: 'at_risk', created_at: '2026-04-15T00:00:00.000Z' },
   { id: 'dep-2', dependent_okr_id: 'okr-5', depended_okr_id: 'okr-2', status: 'healthy', created_at: '2026-04-15T00:00:00.000Z' },
+  { id: 'dep-3', dependent_okr_id: 'okr-2', depended_okr_id: 'okr-1', status: 'healthy', created_at: '2026-04-05T00:00:00.000Z' },
+  { id: 'dep-4', dependent_okr_id: 'okr-3', depended_okr_id: 'okr-1', status: 'healthy', created_at: '2026-04-05T00:00:00.000Z' },
+  { id: 'dep-5', dependent_okr_id: 'okr-9', depended_okr_id: 'okr-7', status: 'healthy', created_at: '2026-01-10T00:00:00.000Z' },
+  { id: 'dep-6', dependent_okr_id: 'okr-10', depended_okr_id: 'okr-8', status: 'at_risk', created_at: '2026-01-10T00:00:00.000Z' },
 ]
 
 const seedNotifications: Notification[] = [
-  { id: 'notif-1', dependency_id: 'dep-1', user_id: 'user-4', message: '您依赖的OKR「产品部提升用户体验」进度落后（38%），存在风险', risk_level: 'warning', is_read: false, created_at: '2026-04-15T00:00:00.000Z' },
-  { id: 'notif-2', dependency_id: 'dep-1', user_id: 'user-5', message: 'OKR「提升前端开发效率」依赖您的OKR进度，请关注', risk_level: 'warning', is_read: false, created_at: '2026-04-15T00:00:00.000Z' },
+  { id: 'notif-1', dependency_id: 'dep-1', user_id: 'user-4', message: '您依赖的OKR「产品部提升用户体验」进度落后（38%），存在风险', risk_level: 'warning', is_read: false, created_at: '2026-05-20T10:00:00.000Z' },
+  { id: 'notif-2', dependency_id: 'dep-1', user_id: 'user-5', message: 'OKR「提升前端开发效率」依赖您的OKR进度，请关注', risk_level: 'warning', is_read: false, created_at: '2026-05-20T10:00:00.000Z' },
+  { id: 'notif-3', dependency_id: 'dep-3', user_id: 'user-2', message: '您依赖的公司级OKR「提升公司整体运营效率」进度正常', risk_level: 'info', is_read: true, created_at: '2026-04-10T00:00:00.000Z' },
+  { id: 'notif-4', dependency_id: 'dep-4', user_id: 'user-3', message: '您依赖的公司级OKR「提升公司整体运营效率」进度正常', risk_level: 'info', is_read: true, created_at: '2026-04-10T00:00:00.000Z' },
+  { id: 'notif-5', dependency_id: 'dep-2', user_id: 'user-5', message: '您依赖的OKR「技术部提升研发效能」进度良好（52%）', risk_level: 'info', is_read: true, created_at: '2026-05-15T00:00:00.000Z' },
+  { id: 'notif-6', dependency_id: 'dep-6', user_id: 'user-5', message: '您依赖的OKR「产品部用户增长」进度滞后，存在风险', risk_level: 'warning', is_read: false, created_at: '2026-02-15T00:00:00.000Z' },
+  { id: 'notif-7', dependency_id: 'dep-1', user_id: 'user-4', message: '依赖风险升级：产品部用户体验OKR进度持续落后', risk_level: 'critical', is_read: false, created_at: '2026-06-01T09:00:00.000Z' },
+]
+
+const seedActivityLogs: ActivityLog[] = [
+  { id: 'log-1', okr_id: 'okr-2', type: 'kr_update', related_id: 'kr-6', actor_id: 'user-2', actor_name: '李明', description: '更新了KR「自动化测试覆盖率」当前值', old_value: '55%', new_value: '62%', created_at: '2026-06-05T10:30:00.000Z' },
+  { id: 'log-2', okr_id: 'okr-2', type: 'weekly_update', related_id: 'wu-3', actor_id: 'user-2', actor_name: '李明', description: '提交了周报 - 第23周', old_value: null, new_value: null, created_at: '2026-06-07T10:15:00.000Z' },
+  { id: 'log-3', okr_id: 'okr-4', type: 'weekly_update', related_id: 'wu-1', actor_id: 'user-4', actor_name: '刘洋', description: '提交了周报 - 第23周', old_value: null, new_value: null, created_at: '2026-06-07T09:30:00.000Z' },
+  { id: 'log-4', okr_id: 'okr-4', type: 'dependency_risk', related_id: 'dep-1', actor_id: null, actor_name: '系统', description: '依赖的OKR「产品部提升用户体验」风险等级变更', old_value: 'healthy', new_value: 'at_risk', created_at: '2026-05-20T16:00:00.000Z' },
+  { id: 'log-5', okr_id: 'okr-3', type: 'kr_update', related_id: 'kr-7', actor_id: 'user-3', actor_name: '王芳', description: '更新了KR「NPS评分提升」当前值', old_value: '35分', new_value: '45分', created_at: '2026-05-25T11:00:00.000Z' },
+  { id: 'log-6', okr_id: 'okr-4', type: 'kr_update', related_id: 'kr-9', actor_id: 'user-4', actor_name: '刘洋', description: '更新了KR「组件库完善度」当前值', old_value: '60%', new_value: '68%', created_at: '2026-06-09T14:00:00.000Z' },
+  { id: 'log-7', okr_id: 'okr-5', type: 'weekly_update', related_id: 'wu-2', actor_id: 'user-5', actor_name: '陈静', description: '提交了周报 - 第23周', old_value: null, new_value: null, created_at: '2026-06-07T14:20:00.000Z' },
+  { id: 'log-8', okr_id: 'okr-2', type: 'weekly_update', related_id: 'wu-4', actor_id: 'user-2', actor_name: '李明', description: '提交了周报 - 第22周', old_value: null, new_value: null, created_at: '2026-05-31T11:00:00.000Z' },
+  { id: 'log-9', okr_id: 'okr-3', type: 'weekly_update', related_id: 'wu-5', actor_id: 'user-3', actor_name: '王芳', description: '提交了周报 - 第22周', old_value: null, new_value: null, created_at: '2026-05-30T16:45:00.000Z' },
+  { id: 'log-10', okr_id: 'okr-4', type: 'weekly_update', related_id: 'wu-6', actor_id: 'user-4', actor_name: '刘洋', description: '提交了周报 - 第22周', old_value: null, new_value: null, created_at: '2026-05-31T15:30:00.000Z' },
+  { id: 'log-11', okr_id: 'okr-6', type: 'review', related_id: 'review-1', actor_id: 'user-1', actor_name: '张伟', description: '完成Q1季度复盘评分', old_value: null, new_value: '0.82分', created_at: '2026-04-02T10:00:00.000Z' },
+  { id: 'log-12', okr_id: 'okr-7', type: 'review', related_id: 'review-2', actor_id: 'user-1', actor_name: '张伟', description: '完成Q1季度复盘评分', old_value: null, new_value: '0.90分', created_at: '2026-04-03T14:00:00.000Z' },
+  { id: 'log-13', okr_id: 'okr-9', type: 'review', related_id: 'review-4', actor_id: 'user-2', actor_name: '李明', description: '完成Q1季度复盘评分', old_value: null, new_value: '0.92分', created_at: '2026-04-02T11:00:00.000Z' },
+  { id: 'log-14', okr_id: 'okr-10', type: 'review', related_id: 'review-5', actor_id: 'user-3', actor_name: '王芳', description: '完成Q1季度复盘评分', old_value: null, new_value: '0.68分', created_at: '2026-04-02T15:00:00.000Z' },
+  { id: 'log-15', okr_id: 'okr-6', type: 'status_change', related_id: null, actor_id: null, actor_name: '系统', description: 'OKR状态变更', old_value: 'active', new_value: 'archived', created_at: '2026-04-01T00:00:00.000Z' },
+  { id: 'log-16', okr_id: 'okr-4', type: 'kr_update', related_id: 'kr-10', actor_id: 'user-4', actor_name: '刘洋', description: '更新了KR「页面加载速度优化」当前值', old_value: '3.8秒', new_value: '3.2秒', created_at: '2026-06-05T16:00:00.000Z' },
+  { id: 'log-17', okr_id: 'okr-5', type: 'kr_update', related_id: 'kr-12', actor_id: 'user-5', actor_name: '陈静', description: '更新了KR「调研报告产出」当前值', old_value: '0份', new_value: '1份', created_at: '2026-05-28T10:00:00.000Z' },
+  { id: 'log-18', okr_id: 'okr-4', type: 'dependency_risk', related_id: 'dep-1', actor_id: null, actor_name: '系统', description: '依赖风险升级', old_value: 'warning', new_value: 'critical', created_at: '2026-06-01T09:00:00.000Z' },
 ]
 
 const seedData: DataStore = {
@@ -211,6 +321,7 @@ const seedData: DataStore = {
   krScores: seedKrScores,
   dependencies: seedDependencies,
   notifications: seedNotifications,
+  activityLogs: seedActivityLogs,
 }
 
 export let departments: Department[] = []
@@ -222,6 +333,7 @@ export let reviews: Review[] = []
 export let krScores: KrScore[] = []
 export let dependencies: Dependency[] = []
 export let notifications: Notification[] = []
+export let activityLogs: ActivityLog[] = []
 
 function ensureDataDir(): void {
   if (!fs.existsSync(dataDir)) {
@@ -244,6 +356,7 @@ export function loadData(): void {
       krScores = data.krScores || []
       dependencies = data.dependencies || []
       notifications = data.notifications || []
+      activityLogs = data.activityLogs || []
     } catch {
       useSeedData()
     }
@@ -262,6 +375,7 @@ function useSeedData(): void {
   krScores = [...seedData.krScores]
   dependencies = [...seedData.dependencies]
   notifications = [...seedData.notifications]
+  activityLogs = [...seedData.activityLogs]
   saveData()
 }
 
@@ -277,6 +391,7 @@ export function saveData(): void {
     krScores,
     dependencies,
     notifications,
+    activityLogs,
   }
   fs.writeFileSync(dataFilePath, JSON.stringify(data, null, 2), 'utf-8')
 }
@@ -305,6 +420,30 @@ export function findKeyResultById(id: string): KeyResult | undefined {
   return keyResults.find(kr => kr.id === id)
 }
 
+export function addActivityLog(
+  okrId: string,
+  type: ActivityLog['type'],
+  relatedId: string | null,
+  actorId: string | null,
+  description: string,
+  oldValue: string | null = null,
+  newValue: string | null = null,
+): void {
+  const actor = actorId ? findUserById(actorId) : null
+  activityLogs.push({
+    id: uuidv4(),
+    okr_id: okrId,
+    type,
+    related_id: relatedId,
+    actor_id: actorId,
+    actor_name: actor?.name ?? (actorId ? null : '系统'),
+    description,
+    old_value: oldValue,
+    new_value: newValue,
+    created_at: new Date().toISOString(),
+  })
+}
+
 export function updateDependencyRisks(okrId: string): void {
   const deps = dependencies.filter(d => d.depended_okr_id === okrId)
   const dependedOkr = findOkrById(okrId)
@@ -320,10 +459,23 @@ export function updateDependencyRisks(okrId: string): void {
     }
 
     if (dep.status !== newStatus) {
+      const oldStatus = dep.status
       dep.status = newStatus
 
+      const dependentOkr = findOkrById(dep.dependent_okr_id)
+      if (dependentOkr) {
+        addActivityLog(
+          dep.dependent_okr_id,
+          'dependency_risk',
+          dep.id,
+          null,
+          `依赖的OKR「${dependedOkr.title}」风险等级变更`,
+          oldStatus,
+          newStatus,
+        )
+      }
+
       if (newStatus === 'at_risk' || newStatus === 'critical') {
-        const dependentOkr = findOkrById(dep.dependent_okr_id)
         if (dependentOkr) {
           const riskLevel: Notification['risk_level'] = newStatus === 'critical' ? 'critical' : 'warning'
           const message = `您依赖的OKR「${dependedOkr.title}」进度下降到${progress}%，风险等级：${newStatus}`

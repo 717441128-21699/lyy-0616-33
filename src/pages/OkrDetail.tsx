@@ -1,8 +1,8 @@
 import { useState, useEffect, useCallback } from 'react';
 import { useParams, useNavigate, Link } from 'react-router-dom';
-import { ArrowLeft, Edit3, Plus, Trash2, Archive, ChevronRight, Save, RefreshCw, ExternalLink } from 'lucide-react';
-import { fetchOkrById, fetchWeeklyUpdates, updateKeyResultProgress, deleteKeyResult, createKeyResult, updateOkr, archiveOkr, fetchOkrs, syncKeyResult, fetchOkrById as getOkrDetail } from '@/api';
-import type { OKRWithDetails, KeyResult, WeeklyUpdate, OKR } from '@/types';
+import { ArrowLeft, Edit3, Plus, Trash2, Archive, ChevronRight, Save, RefreshCw, ExternalLink, Activity, FileText, AlertTriangle, Zap, Clock } from 'lucide-react';
+import { fetchOkrById, fetchWeeklyUpdates, updateKeyResultProgress, deleteKeyResult, createKeyResult, updateOkr, archiveOkr, fetchOkrs, syncKeyResult, fetchOkrById as getOkrDetail, fetchActivityLogs } from '@/api';
+import type { OKRWithDetails, KeyResult, WeeklyUpdate, OKR, ActivityLog } from '@/types';
 import ProgressRing from '@/components/ProgressRing';
 import ProgressBar from '@/components/ProgressBar';
 import Modal from '@/components/Modal';
@@ -11,6 +11,15 @@ const LB: Record<string, string> = { company: 'bg-blue-100 text-blue-700', depar
 const LL: Record<string, string> = { company: '公司级', department: '部门级', individual: '个人级' };
 const SB: Record<string, string> = { draft: 'bg-gray-100 text-gray-600', active: 'bg-green-100 text-green-700', completed: 'bg-blue-100 text-blue-700', archived: 'bg-yellow-100 text-yellow-700' };
 const SL: Record<string, string> = { draft: '草稿', active: '进行中', completed: '已完成', archived: '已归档' };
+
+const logTypeConfig: Record<string, { icon: React.ElementType; color: string; bgColor: string; label: string }> = {
+  kr_update: { icon: Activity, color: 'text-blue-600', bgColor: 'bg-blue-100', label: 'KR更新' },
+  kr_sync: { icon: Zap, color: 'text-accent-600', bgColor: 'bg-accent-100', label: '自动同步' },
+  weekly_update: { icon: FileText, color: 'text-brand-600', bgColor: 'bg-brand-100', label: '周报提交' },
+  review: { icon: Clock, color: 'text-purple-600', bgColor: 'bg-purple-100', label: '复盘评分' },
+  dependency_risk: { icon: AlertTriangle, color: 'text-orange-600', bgColor: 'bg-orange-100', label: '风险变更' },
+  status_change: { icon: Activity, color: 'text-gray-600', bgColor: 'bg-gray-100', label: '状态变更' },
+};
 
 function KrCard({ kr, okrId, onRefresh }: { kr: KeyResult; okrId: string; onRefresh: () => void }) {
   const [editing, setEditing] = useState(false);
@@ -84,6 +93,7 @@ export default function OkrDetail() {
   const [parentOkr, setParentOkr] = useState<OKR | null>(null);
   const [updates, setUpdates] = useState<WeeklyUpdate[]>([]);
   const [children, setChildren] = useState<OKR[]>([]);
+  const [activityLogs, setActivityLogs] = useState<ActivityLog[]>([]);
   const [showAddKr, setShowAddKr] = useState(false);
   const [editing, setEditing] = useState(false);
   const [editForm, setEditForm] = useState({ title: '', description: '', status: '' as OKRWithDetails['status'] });
@@ -105,6 +115,8 @@ export default function OkrDetail() {
     setUpdates(w);
     const c = await fetchOkrs({ parent_okr_id: id });
     setChildren(c);
+    const logs = await fetchActivityLogs(id);
+    setActivityLogs(logs);
   }, [id]);
 
   useEffect(() => { load(); }, [load]);
@@ -208,9 +220,47 @@ export default function OkrDetail() {
       </div>
 
       <div className="bg-white rounded-xl shadow-sm border border-gray-100 p-6">
-        <h3 className="text-lg font-display font-semibold text-gray-900 mb-4">周报更新</h3>
-        {updates.length === 0 ? <p className="text-gray-400 text-sm text-center py-6">暂无周报更新</p>
-          : <div>{updates.map((u) => <WeekItem key={u.id} update={u} />)}</div>}
+        <h3 className="text-lg font-display font-semibold text-gray-900 mb-4">变更时间线</h3>
+        {activityLogs.length === 0 ? <p className="text-gray-400 text-sm text-center py-6">暂无变更记录</p>
+          : (
+            <div className="space-y-1">
+              {activityLogs.map((log) => {
+                const config = logTypeConfig[log.type] || logTypeConfig.kr_update;
+                const Icon = config.icon;
+                return (
+                  <div key={log.id} className="flex gap-3 relative pb-4 group">
+                    <div className="flex flex-col items-center z-10">
+                      <div className={`w-8 h-8 rounded-full ${config.bgColor} flex items-center justify-center flex-shrink-0`}>
+                        <Icon className={`w-4 h-4 ${config.color}`} />
+                      </div>
+                      <div className="w-0.5 flex-1 bg-gray-100" />
+                    </div>
+                    <div className="flex-1 -mt-0.5 pb-1">
+                      <div className="flex items-center gap-2 mb-1">
+                        <span className={`text-[10px] px-1.5 py-0.5 rounded font-medium ${config.bgColor} ${config.color}`}>{config.label}</span>
+                        <span className="text-xs text-gray-500">{log.actor_name || '未知'}</span>
+                        <span className="text-xs text-gray-400">{new Date(log.created_at).toLocaleString('zh-CN')}</span>
+                      </div>
+                      <p className="text-sm text-gray-700">{log.description}</p>
+                      {(log.old_value || log.new_value) && (
+                        <div className="flex items-center gap-2 mt-1.5 text-xs">
+                          {log.old_value && <span className="px-2 py-0.5 bg-gray-100 text-gray-500 rounded">{log.old_value}</span>}
+                          {log.old_value && log.new_value && <ChevronRight className="w-3 h-3 text-gray-300" />}
+                          {log.new_value && <span className="px-2 py-0.5 bg-green-100 text-green-700 rounded font-medium">{log.new_value}</span>}
+                        </div>
+                      )}
+                      {log.detail && log.type === 'weekly_update' && (
+                        <div className="mt-2 p-2 bg-gray-50 rounded-lg text-xs text-gray-600">
+                          <p>信心指数: {(log.detail as any).confidence_index}/10</p>
+                          <p className="mt-1">{(log.detail as any).progress_description}</p>
+                        </div>
+                      )}
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+          )}
       </div>
 
       {okr.status === 'completed' && (

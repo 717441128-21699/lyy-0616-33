@@ -1,6 +1,6 @@
 import { Router, type Request, type Response } from 'express'
 import { v4 as uuidv4 } from 'uuid'
-import { weeklyUpdates, okrs, keyResults, recalcOkrProgress, findUserById, updateDependencyRisks, saveData } from '../db/store.js'
+import { weeklyUpdates, okrs, keyResults, recalcOkrProgress, findUserById, updateDependencyRisks, saveData, addActivityLog } from '../db/store.js'
 
 const router = Router()
 
@@ -81,6 +81,15 @@ router.post('/', (req: Request, res: Response): void => {
       recalcOkrProgress(okr_id)
       updateDependencyRisks(okr_id)
     }
+    addActivityLog(
+      okr_id,
+      'weekly_update',
+      wu.id,
+      updated_by || null,
+      `提交了周报 - 第${week_number}周`,
+      null,
+      null,
+    )
     saveData()
     res.status(201).json({ success: true, data: wu })
   } catch (error) {

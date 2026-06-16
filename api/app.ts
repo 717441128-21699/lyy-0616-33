@@ -14,6 +14,7 @@ import reviewsRouter from './routes/reviews.js'
 import dependenciesRouter from './routes/dependencies.js'
 import heatmapRouter from './routes/heatmap.js'
 import archiveRouter from './routes/archive.js'
+import activityRouter from './routes/activity.js'
 
 const __filename = fileURLToPath(import.meta.url)
 const __dirname = path.dirname(__filename)
@@ -33,6 +34,7 @@ app.use('/api/reviews', reviewsRouter)
 app.use('/api/dependencies', dependenciesRouter)
 app.use('/api/heatmap', heatmapRouter)
 app.use('/api/archive', archiveRouter)
+app.use('/api/activity', activityRouter)
 
 app.use(
   '/api/health',
