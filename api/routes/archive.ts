@@ -1,5 +1,5 @@
 import { Router, type Request, type Response } from 'express'
-import { okrs, keyResults, findOkrById, findUserById, isQuarterEnded, saveData, dependencies, reviews, krScores } from '../db/store.js'
+import { okrs, keyResults, findOkrById, findUserById, isQuarterEnded, saveData, dependencies, reviews, krScores, departments, findDepartmentById } from '../db/store.js'
 
 const router = Router()
 
@@ -59,6 +59,7 @@ router.get('/report', (req: Request, res: Response): void => {
 
     const okrReports = archivedOkrs.map(okr => {
       const owner = findUserById(okr.owner_id)
+      const dept = okr.department_id ? findDepartmentById(okr.department_id) : null
       const krs = keyResults.filter(kr => kr.okr_id === okr.id)
       const deps = dependencies.filter(d => d.depended_okr_id === okr.id || d.dependent_okr_id === okr.id)
       const okrReviews = reviews.filter(r => r.okr_id === okr.id && r.quarter === q && r.year === y)
@@ -87,6 +88,8 @@ router.get('/report', (req: Request, res: Response): void => {
         description: okr.description,
         level: okr.level,
         owner_name: owner?.name ?? null,
+        department_id: okr.department_id,
+        department_name: dept?.name ?? null,
         overall_progress: okr.overall_progress,
         status: okr.status,
         key_results: krs.map(kr => ({

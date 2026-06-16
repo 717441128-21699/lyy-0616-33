@@ -1,5 +1,5 @@
 import { useState, useEffect, useCallback, useMemo } from 'react';
-import { Link, useNavigate } from 'react-router-dom';
+import { useNavigate } from 'react-router-dom';
 import { Link2, Plus, Trash2, Bell, ArrowRight, ShieldAlert, CheckSquare, Filter, ChevronRight, Users } from 'lucide-react';
 import type { OKR, Dependency, DependencyGraphData, Notification } from '@/types';
 import { fetchOkrs, fetchDependencies, fetchDependencyGraph, createDependency, deleteDependency } from '@/api';
@@ -51,8 +51,46 @@ export default function Dependencies() {
   const [notifFilters, setNotifFilters] = useState({
     is_read: '',
     risk_level: '',
+    party_type: '' as '' | 'dependent' | 'depended',
+    party_okr_id: '',
   });
   const notifStore = useNotificationStore();
+
+  const notificationOkrs = useMemo(() => {
+    const okrMap = new Map<string, { id: string; title: string }>();
+    notifStore.notifications.forEach((n) => {
+      const enhanced = n as Notification & { dependent_okr_id?: string; depended_okr_id?: string; dependent_okr_title?: string; depended_okr_title?: string };
+      if (enhanced.dependent_okr_id && enhanced.dependent_okr_title) {
+        okrMap.set(enhanced.dependent_okr_id, { id: enhanced.dependent_okr_id, title: enhanced.dependent_okr_title });
+      }
+      if (enhanced.depended_okr_id && enhanced.depended_okr_title) {
+        okrMap.set(enhanced.depended_okr_id, { id: enhanced.depended_okr_id, title: enhanced.depended_okr_title });
+      }
+    });
+    return Array.from(okrMap.values());
+  }, [notifStore.notifications]);
+
+  const filteredNotifications = useMemo(() => {
+    return notifStore.notifications.filter((n) => {
+      const enhanced = n as Notification & { dependent_okr_id?: string; depended_okr_id?: string };
+      if (notifFilters.party_type === 'dependent' && notifFilters.party_okr_id) {
+        if (enhanced.dependent_okr_id !== notifFilters.party_okr_id) return false;
+      }
+      if (notifFilters.party_type === 'depended' && notifFilters.party_okr_id) {
+        if (enhanced.depended_okr_id !== notifFilters.party_okr_id) return false;
+      }
+      return true;
+    });
+  }, [notifStore.notifications, notifFilters.party_type, notifFilters.party_okr_id]);
+
+  const filteredUnreadCount = useMemo(() => {
+    return filteredNotifications.filter((n) => !n.is_read).length;
+  }, [filteredNotifications]);
+
+  const selectAllFilteredUnread = () => {
+    const unreadIds = filteredNotifications.filter((n) => !n.is_read).map((n) => n.id);
+    setSelectedNotifs(unreadIds);
+  };
 
   const loadData = useCallback(async () => {
     const [d, g, o] = await Promise.all([fetchDependencies(), fetchDependencyGraph(), fetchOkrs({ status: 'active' })]);
@@ -92,11 +130,6 @@ export default function Dependencies() {
     setSelectedNotifs((prev) =>
       prev.includes(id) ? prev.filter((i) => i !== id) : [...prev, id]
     );
-  };
-
-  const selectAllUnread = () => {
-    const unreadIds = notifStore.notifications.filter((n) => !n.is_read).map((n) => n.id);
-    setSelectedNotifs(unreadIds);
   };
 
   const clearSelection = () => {
@@ -286,40 +319,73 @@ export default function Dependencies() {
             <h3 className="text-lg font-display font-semibold text-gray-800 flex items-center gap-2">
               <ShieldAlert className="w-5 h-5 text-accent-500" />风险通知
               {notifStore.unreadCount > 0 && (
-                <span className="bg-red-500 text-white text-xs font-bold rounded-full px-2 py-0.5">{notifStore.unreadCount}</span>
+                <span className="bg-red-500 text-white text-xs font-bold rounded-full px-2 py-0.5">
+                  全部未读 {notifStore.unreadCount}
+                </span>
+              )}
+              {(notifFilters.party_type || notifFilters.is_read || notifFilters.risk_level) && filteredUnreadCount > 0 && (
+                <span className="bg-accent-500 text-white text-xs font-bold rounded-full px-2 py-0.5">
+                  筛选后未读 {filteredUnreadCount}
+                </span>
               )}
             </h3>
           </div>
 
-          <div className="flex items-center gap-2 mb-3 pb-3 border-b border-gray-100">
-            <Filter className="w-3.5 h-3.5 text-gray-400" />
-            <select
-              value={notifFilters.is_read}
-              onChange={(e) => setNotifFilters((p) => ({ ...p, is_read: e.target.value }))}
-              className="flex-1 border border-gray-200 rounded px-2 py-1 text-xs focus:ring-1 focus:ring-brand-500 outline-none bg-white"
-            >
-              <option value="">全部状态</option>
-              <option value="false">未读</option>
-              <option value="true">已读</option>
-            </select>
-            <select
-              value={notifFilters.risk_level}
-              onChange={(e) => setNotifFilters((p) => ({ ...p, risk_level: e.target.value }))}
-              className="flex-1 border border-gray-200 rounded px-2 py-1 text-xs focus:ring-1 focus:ring-brand-500 outline-none bg-white"
-            >
-              <option value="">全部等级</option>
-              <option value="critical">严重</option>
-              <option value="warning">警告</option>
-              <option value="info">提示</option>
-            </select>
+          <div className="space-y-2 mb-3 pb-3 border-b border-gray-100">
+            <div className="flex items-center gap-2">
+              <Filter className="w-3.5 h-3.5 text-gray-400" />
+              <select
+                value={notifFilters.is_read}
+                onChange={(e) => setNotifFilters((p) => ({ ...p, is_read: e.target.value }))}
+                className="flex-1 border border-gray-200 rounded px-2 py-1 text-xs focus:ring-1 focus:ring-brand-500 outline-none bg-white"
+              >
+                <option value="">全部状态</option>
+                <option value="false">未读</option>
+                <option value="true">已读</option>
+              </select>
+              <select
+                value={notifFilters.risk_level}
+                onChange={(e) => setNotifFilters((p) => ({ ...p, risk_level: e.target.value }))}
+                className="flex-1 border border-gray-200 rounded px-2 py-1 text-xs focus:ring-1 focus:ring-brand-500 outline-none bg-white"
+              >
+                <option value="">全部等级</option>
+                <option value="critical">严重</option>
+                <option value="warning">警告</option>
+                <option value="info">提示</option>
+              </select>
+            </div>
+            <div className="flex items-center gap-2">
+              <Users className="w-3.5 h-3.5 text-gray-400" />
+              <select
+                value={notifFilters.party_type}
+                onChange={(e) => setNotifFilters((p) => ({ ...p, party_type: e.target.value as '' | 'dependent' | 'depended', party_okr_id: '' }))}
+                className="flex-1 border border-gray-200 rounded px-2 py-1 text-xs focus:ring-1 focus:ring-brand-500 outline-none bg-white"
+              >
+                <option value="">不按依赖方筛选</option>
+                <option value="dependent">按依赖方筛选</option>
+                <option value="depended">按被依赖方筛选</option>
+              </select>
+              {notifFilters.party_type && notificationOkrs.length > 0 && (
+                <select
+                  value={notifFilters.party_okr_id}
+                  onChange={(e) => setNotifFilters((p) => ({ ...p, party_okr_id: e.target.value }))}
+                  className="flex-2 border border-gray-200 rounded px-2 py-1 text-xs focus:ring-1 focus:ring-brand-500 outline-none bg-white"
+                >
+                  <option value="">全部{notifFilters.party_type === 'dependent' ? '依赖方' : '被依赖方'}</option>
+                  {notificationOkrs.map((o) => (
+                    <option key={o.id} value={o.id}>{o.title}</option>
+                  ))}
+                </select>
+              )}
+            </div>
           </div>
 
           <div className="flex items-center gap-2 mb-3">
             <button
-              onClick={selectAllUnread}
+              onClick={selectAllFilteredUnread}
               className="text-xs text-brand-600 hover:text-brand-800 transition-colors"
             >
-              全选未读
+              全选筛选后未读
             </button>
             <span className="text-gray-200">|</span>
             <button
@@ -342,7 +408,7 @@ export default function Dependencies() {
           </div>
 
           <div className="space-y-2 max-h-[60vh] overflow-y-auto">
-            {notifStore.notifications.map((n: Notification) => (
+            {filteredNotifications.map((n: Notification) => (
               <div
                 key={n.id}
                 className={`p-3 rounded-lg border transition-all ${

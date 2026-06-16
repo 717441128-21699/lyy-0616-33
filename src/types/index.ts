@@ -112,7 +112,10 @@ export interface Notification {
   is_read: boolean;
   dependency_status?: string;
   dependent_okr_id?: string;
+  dependent_okr_title?: string;
   depended_okr_id?: string;
+  depended_okr_title?: string;
+  user_name?: string;
   created_at: string;
 }
 

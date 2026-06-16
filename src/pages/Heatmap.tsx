@@ -206,7 +206,7 @@ export default function Heatmap() {
                         {cell.progress !== null ? (
                           <div className="group relative inline-flex items-center justify-center">
                             <button
-                              onClick={() => navigate(`/okrs/${cell.okrId}`)}
+                              onClick={() => navigate(`/okrs/${cell.okrId}?from=heatmap&progress=${cell.progress}&risk=${cell.riskStatus || ''}&member=${member.user_id}`)}
                               className={`inline-block px-3 py-1.5 rounded-lg text-xs font-bold ${cellColor(cell.progress)} hover:ring-2 hover:ring-brand-300 transition-all cursor-pointer`}
                             >
                               {Math.round(cell.progress)}%
@@ -249,7 +249,7 @@ export default function Heatmap() {
             {laggards.map((item) => (
               <div
                 key={item.id}
-                onClick={() => navigate(`/okrs/${item.id}`)}
+                onClick={() => navigate(`/okrs/${item.id}?from=heatmap&progress=${item.progress}&risk=${item.risk_status || ''}&laggard=true`)}
                 className="flex items-center gap-4 p-4 rounded-lg border border-gray-200 hover:border-brand-300 hover:shadow-sm cursor-pointer transition-all"
               >
                 <div className="flex-1 min-w-0">

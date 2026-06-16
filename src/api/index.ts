@@ -188,6 +188,8 @@ export interface QuarterlyReport {
     description: string;
     level: string;
     owner_name: string | null;
+    department_id: string | null;
+    department_name: string | null;
     overall_progress: number;
     status: string;
     kr_completed_count: number;

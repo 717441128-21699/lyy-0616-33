@@ -416,6 +416,10 @@ export function findOkrById(id: string): OKR | undefined {
   return okrs.find(o => o.id === id)
 }
 
+export function findDepartmentById(id: string): Department | undefined {
+  return departments.find(d => d.id === id)
+}
+
 export function findKeyResultById(id: string): KeyResult | undefined {
   return keyResults.find(kr => kr.id === id)
 }
